@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contacto — Sitio Empresarial</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --brand: #2563eb;
+    --brand-hover: #1d4ed8;
+    --ok: #059669;
+    --err: #dc2626;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #1e293b, var(--bg));
+    color: var(--text);
+  }
+  .card {
+    width: 100%;
+    max-width: 520px;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 24px 60px rgba(2, 6, 23, .35);
+  }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; letter-spacing: -.02em; }
+  p.sub { margin: 0 0 24px; color: var(--muted); font-size: .925rem; }
+  label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 6px; }
+  input, textarea {
+    width: 100%;
+    padding: 11px 13px;
+    font: inherit;
+    color: inherit;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #f8fafc;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
+    background: #fff;
+  }
+  textarea { resize: vertical; min-height: 110px; }
+  .field { margin-bottom: 16px; }
+  .hint { font-size: .78rem; color: var(--muted); margin-top: 5px; }
+  button {
+    width: 100%;
+    padding: 12px;
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: var(--brand);
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .15s, transform .05s;
+  }
+  button:hover:not(:disabled) { background: var(--brand-hover); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+  .status {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: .875rem;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.ok { background: #ecfdf5; color: var(--ok); border: 1px solid #a7f3d0; }
+  .status.err { background: #fef2f2; color: var(--err); border: 1px solid #fecaca; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>Hablemos</h1>
+    <p class="sub">Cuéntanos qué necesitas y te respondemos a la brevedad.</p>
+
+    <form id="form-contacto" novalidate>
+      <div class="field">
+        <label for="nombre">Nombre</label>
+        <input id="nombre" name="nombre" type="text" maxlength="120" required autocomplete="name" placeholder="Tu nombre">
+      </div>
+
+      <div class="field">
+        <label for="email">Correo electrónico</label>
+        <input id="email" name="email" type="email" maxlength="160" required autocomplete="email" placeholder="tu@empresa.com">
+      </div>
+
+      <div class="field">
+        <label for="mensaje">Mensaje</label>
+        <textarea id="mensaje" name="mensaje" maxlength="2000" placeholder="Escribe tu mensaje (opcional)"></textarea>
+        <div class="hint"><span id="contador">0</span> / 2000</div>
+      </div>
+
+      <button type="submit" id="btn-enviar">Enviar mensaje</button>
+      <div id="estado" class="status" role="status" aria-live="polite"></div>
+    </form>
+  </main>
+
+  <script src="config.js"></script>
+  <script>
+    const form = document.getElementById('form-contacto');
+    const btn = document.getElementById('btn-enviar');
+    const estado = document.getElementById('estado');
+    const mensajeInput = document.getElementById('mensaje');
+    const contador = document.getElementById('contador');
+
+    mensajeInput.addEventListener('input', () => {
+      contador.textContent = mensajeInput.value.length;
+    });
+
+    function mostrar(tipo, texto) {
+      estado.className = 'status show ' + tipo;
+      estado.textContent = texto;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const nombre = form.nombre.value.trim();
+      const email = form.email.value.trim();
+      const mensaje = form.mensaje.value.trim();
+
+      if (nombre.length < 2) return mostrar('err', 'Escribe tu nombre (mínimo 2 caracteres).');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return mostrar('err', 'El correo no tiene un formato válido.');
+
+      btn.disabled = true;
+      btn.textContent = 'Enviando…';
+      estado.className = 'status';
+
+      try {
+        const res = await fetch(`${window.SUPABASE_URL}/rest/v1/contactos`, {
+          method: 'POST',
+          headers: {
+            'apikey': window.SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ nombre, email, mensaje: mensaje || null })
+        });
+
+        if (res.status === 201) {
+          form.reset();
+          contador.textContent = '0';
+          mostrar('ok', '¡Mensaje enviado! Gracias por escribirnos.');
+        } else {
+          let detalle = '';
+          try {
+            const err = await res.json();
+            detalle = err.message || err.hint || '';
+          } catch (_) {}
+          mostrar('err', `No se pudo enviar (HTTP ${res.status}). ${detalle}`);
+        }
+      } catch (err) {
+        mostrar('err', 'Error de red: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Enviar mensaje';
+      }
+    });
+  </script>
+</body>
+</html>

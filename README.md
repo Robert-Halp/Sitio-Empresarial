@@ -92,6 +92,27 @@ Mensajes del formulario de contacto.
 
 El formulario público solo puede **insertar**. Nadie anónimo puede leer los mensajes.
 
+## Formulario web
+
+`web/` contiene un formulario de contacto sin build ni dependencias: HTML + CSS + JS, usando `fetch` contra la API REST.
+
+```
+web/
+├── index.html   # formulario y estilos
+└── config.js    # SUPABASE_URL + anon key (claves publicas)
+```
+
+**Verlo en local** (cualquier servidor estático sirve):
+
+```powershell
+cd web
+npx serve .          # o abre index.html directamente en el navegador
+```
+
+**Flujo:** el formulario hace `POST /rest/v1/contactos` → RLS permite el insert anónimo → la fila aparece en Supabase → *Table Editor* → `contactos`.
+
+**Seguridad:** la anon key es pública por diseño y RLS impide leer los mensajes. Pero el insert es abierto, así que conviene añadir captcha o rate limiting antes de publicar el sitio.
+
 ## Estructura
 
 ```
