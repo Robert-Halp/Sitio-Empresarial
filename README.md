@@ -94,6 +94,8 @@ El formulario público solo puede **insertar**. Nadie anónimo puede leer los me
 
 ## Formulario web
 
+**Publicado:** https://web-marga4.vercel.app
+
 `web/` contiene un formulario de contacto sin build ni dependencias: HTML + CSS + JS, usando `fetch` contra la API REST.
 
 ```
