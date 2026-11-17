@@ -67,6 +67,31 @@ supabase start
 supabase stop
 ```
 
+## Esquema de datos
+
+### `public.contactos`
+
+Mensajes del formulario de contacto.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid | PK, `gen_random_uuid()` |
+| `nombre` | text | 2–120 caracteres |
+| `email` | text | validación mínima de `@` |
+| `mensaje` | text | máx. 2000 caracteres |
+| `creado_en` | timestamptz | `now()` |
+
+**RLS activo** (probado contra la API real):
+
+| Rol | INSERT | SELECT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `anon` | ✅ | ❌ `42501` | ❌ | ❌ |
+| `authenticated` | ✅ | ✅ | ❌ | ❌ |
+| `service_role` | ✅ | ✅ | ✅ | ✅ |
+| sin clave | ❌ `401` | ❌ | ❌ | ❌ |
+
+El formulario público solo puede **insertar**. Nadie anónimo puede leer los mensajes.
+
 ## Estructura
 
 ```
