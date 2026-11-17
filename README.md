@@ -1,16 +1,74 @@
 # Sitio-Empresarial
 
-Repositorio del sitio empresarial.
+Repositorio del sitio empresarial. Backend de datos sobre **Supabase** (Postgres + API REST automática + Auth).
 
-## Estado
+## Requisitos
 
-Repositorio inicializado y conectado con GitHub mediante Git + GitHub CLI.
-Este archivo se creó como commit de prueba de la conexión.
+| Herramienta | Versión | Instalado |
+|---|---|---|
+| Git | 2.56+ | ✅ |
+| Node.js (LTS) | 26.x | ✅ |
+| Supabase CLI | 3.2+ | ✅ |
+| Docker Desktop | — | ⬜ opcional, solo para desarrollo local |
 
-## Primeros pasos
+## Configuración
 
-```bash
-git status
-git log --oneline
-git remote -v
+1. Copia las variables de entorno:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+2. Rellena `.env` con los datos de tu proyecto:
+   `Settings > API` → Project URL + anon key.
+   `Settings > Database` → contraseña y connection string.
+
+3. Enlaza el proyecto remoto (una sola vez):
+
+   ```powershell
+   supabase login
+   supabase link --project-ref <project-ref>
+   ```
+
+   El `project-ref` es el trozo de la URL: `https://<project-ref>.supabase.co`.
+
+## Comandos habituales
+
+```powershell
+# Ver estado del CLI y del proyecto enlazado
+supabase status
+supabase projects list
+
+# Traer el esquema remoto como migraciones
+supabase db pull
+
+# Crear una migración nueva
+supabase db diff -f nombre_de_la_migracion
+
+# Aplicar migraciones al proyecto remoto
+supabase db push
+
+# Desarrollo local completo (requiere Docker)
+supabase start
+supabase stop
 ```
+
+## Estructura
+
+```
+.
+├── .env.example        # plantilla de variables (sí se sube)
+├── .env                # valores reales (NO se sube)
+├── .gitignore
+├── README.md
+└── supabase/
+    ├── config.toml     # configuración del CLI
+    └── migrations/     # migraciones SQL versionadas
+```
+
+## Seguridad
+
+- El repo es **público**: nunca subas `.env`, claves ni contraseñas.
+- `SUPABASE_SERVICE_ROLE_KEY` omite RLS → **solo en servidor**.
+- Activa **RLS en todas las tablas** y escribe políticas explícitas.
+- No expongas tablas nuevas automáticamente; da permisos a mano.

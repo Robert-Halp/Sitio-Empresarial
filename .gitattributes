@@ -1,0 +1,11 @@
+# Normaliza finales de línea en el repositorio (evita diffs falsos entre Windows/Linux)
+* text=auto
+
+# Binarios
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

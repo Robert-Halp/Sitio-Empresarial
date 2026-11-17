@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Variables de entorno / secretos (NUNCA subir)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Builds
+dist/
+build/
+.next/
+out/
+.cache/
+.turbo/
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+.supabase/
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
