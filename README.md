@@ -32,6 +32,20 @@ Repositorio del sitio empresarial. Backend de datos sobre **Supabase** (Postgres
 
    El `project-ref` es el trozo de la URL: `https://<project-ref>.supabase.co`.
 
+## Proyecto vinculado
+
+| Dato | Valor |
+|---|---|
+| Nombre | Robert-Halp's Project |
+| Ref | `qflopcnipzecycjopulg` |
+| URL API | `https://qflopcnipzecycjopulg.supabase.co` |
+| Región | East US (North Virginia) |
+| Postgres | 17.12 |
+
+> Sin Docker, los comandos de BD apuntan por defecto al stack local
+> (`127.0.0.1:54322`) y fallan con `ECONNREFUSED`. Añade siempre `--remote`
+> para trabajar contra el proyecto real: `supabase migration list --remote`.
+
 ## Comandos habituales
 
 ```powershell
