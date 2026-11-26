@@ -92,6 +92,39 @@ Mensajes del formulario de contacto.
 
 El formulario público solo puede **insertar**. Nadie anónimo puede leer los mensajes.
 
+### Constructora de casas — 5 tablas
+
+```
+clientes 1 ──── N proyectos
+                      │
+                      │ N
+                      ▼
+                 asignaciones  ◄──── N empleados
+                 (proyecto ↔ empleado)
+
+materiales (catálogo independiente)
+```
+
+| Tabla | Para qué sirve | Columnas clave |
+|---|---|---|
+| `clientes` | Quién contrata la obra | nombre, email (único), teléfono, dirección |
+| `proyectos` | Cada obra | cliente_id → clientes, nombre, estado, presupuesto, fechas |
+| `empleados` | Plantilla | nombre, puesto, salario, activo, contratado_en |
+| `asignaciones` | Quién trabaja en qué obra | proyecto_id, empleado_id, rol_en_obra, horas_semanales, desde/hasta |
+| `materiales` | Catálogo con inventario | nombre, unidad, precio_unitario, stock, proveedor |
+
+**Reglas de integridad incluidas:**
+
+- `proyectos.estado` limitado a: planificacion, permisos, cimentacion, estructura, acabados, entregado, cancelado
+- `empleados.puesto` limitado a 8 puestos válidos
+- `materiales.unidad` limitada a: unidad, kg, m, m2, m3, saco, litro, rollo
+- `asignaciones` no permite duplicar el mismo empleado en el mismo proyecto y fecha
+- `fecha_entrega >= fecha_inicio`, precios y stock no negativos
+- Borrar un proyecto borra sus asignaciones (`on delete cascade`)
+- No se puede borrar un cliente con proyectos (`on delete restrict`)
+
+**Seguridad:** RLS activo en las 5 tablas. Solo `service_role` puede operar; `anon` recibe `401 42501`. Las políticas `staff ...` conceden acceso a usuarios autenticados cuando se añada Auth.
+
 ## Formulario web
 
 **Publicado:** https://web-marga4.vercel.app
