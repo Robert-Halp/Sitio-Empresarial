@@ -157,7 +157,9 @@ proyectos por estado.
 
 ```
 docs/
-├── index.html   # dashboard completo (estilos y lógica incluidos)
+├── index.html   # estructura de la página
+├── styles.css   # diseño y responsive
+├── app.js       # consumo de la API y render
 └── .nojekyll    # evita el procesado de Jekyll en GitHub Pages
 ```
 
