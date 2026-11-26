@@ -131,6 +131,39 @@ materiales (catálogo independiente)
 
 **Schema expuesto:** `public`, `graphql_public` y `constructora` (`supabase/config.toml` → `[api] schemas`).
 
+### Vistas públicas de solo lectura
+
+El panel web no puede leer las tablas (RLS solo permite `service_role`). Por eso se exponen
+5 **vistas** que resuelven las relaciones y ocultan datos sensibles (`empleados.salario`):
+
+| Vista | Contenido |
+|---|---|
+| `constructora.vista_clientes` | Cliente con contacto y dirección |
+| `constructora.vista_proyectos` | Proyecto + nombre del cliente |
+| `constructora.vista_empleados` | Plantilla **sin salario** |
+| `constructora.vista_asignaciones` | Empleado + proyecto + rol resueltos |
+| `constructora.vista_materiales` | Catálogo con precio y stock |
+
+`anon` solo tiene `SELECT` sobre estas vistas; INSERT/UPDATE/DELETE y las tablas base siguen
+bloqueados. Se crean en `20261126195016_vistas_publicas.sql`.
+
+## Panel de operaciones (dashboard)
+
+**Publicado:** https://robert-halp.github.io/Sitio-Empresarial/
+
+`docs/` contiene un dashboard estático (HTML + CSS + JS, sin build) que consume las 5 vistas
+con `Accept-Profile: constructora`. Incluye KPIs, búsqueda, orden por columna y gráfico de
+proyectos por estado.
+
+```
+docs/
+├── index.html   # dashboard completo (estilos y lógica incluidos)
+└── .nojekyll    # evita el procesado de Jekyll en GitHub Pages
+```
+
+Para verlo en local sirve cualquier servidor estático (`npx serve docs`); abrir el archivo
+con `file://` también funciona pero algunos navegadores bloquean `fetch`.
+
 ## Formulario web
 
 **Publicado:** https://web-marga4.vercel.app
@@ -162,6 +195,10 @@ npx serve .          # o abre index.html directamente en el navegador
 ├── .env                # valores reales (NO se sube)
 ├── .gitignore
 ├── README.md
+├── docs/               # dashboard publicado en GitHub Pages
+│   ├── index.html
+│   └── .nojekyll
+├── web/                # formulario de contacto (Vercel)
 └── supabase/
     ├── config.toml     # configuración del CLI
     └── migrations/     # migraciones SQL versionadas
