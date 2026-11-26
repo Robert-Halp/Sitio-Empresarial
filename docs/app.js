@@ -61,7 +61,7 @@ const COLS = {
     { k: "creado_en", t: "Alta",     tipo: "fecha" }
   ],
   proyectos: [
-    { k: "nombre",        t: "Proyecto",    tipo: "principal" },
+    { k: "nombre",        t: "Proyecto",    tipo: "principal", sub: (f) => f.direccion },
     { k: "cliente",       t: "Cliente" },
     { k: "estado",        t: "Estado",      tipo: "estado" },
     { k: "avance",        t: "Avance",      tipo: "calc", calc: (f) => avanceDeProyecto(f.nombre), render: "pct", num: true },
@@ -70,7 +70,7 @@ const COLS = {
     { k: "fecha_entrega", t: "Entrega",     tipo: "fecha" }
   ],
   empleados: [
-    { k: "nombre",        t: "Empleado",   tipo: "persona" },
+    { k: "nombre",        t: "Empleado",   tipo: "persona", sub: (f) => f.email },
     { k: "puesto",        t: "Puesto",     tipo: "puesto" },
     { k: "telefono",      t: "Teléfono" },
     { k: "obras",         t: "Obras",      tipo: "calc", calc: (f) => obrasDeEmpleado(f.nombre), num: true, formato: "num" },
@@ -103,7 +103,7 @@ const COLS = {
   ],
   pagos: [
     { k: "fecha",      t: "Fecha",     tipo: "fecha" },
-    { k: "proyecto",   t: "Proyecto" },
+    { k: "proyecto",   t: "Proyecto",  tipo: "principal", sub: (f) => clienteDeProyecto(f.proyecto) },
     { k: "monto",      t: "Monto",     tipo: "dinero", dec: 2, num: true },
     { k: "metodo",     t: "Método",    tipo: "puesto" },
     { k: "referencia", t: "Referencia" },
@@ -112,13 +112,13 @@ const COLS = {
   consumos: [
     { k: "fecha",    t: "Fecha",    tipo: "fecha" },
     { k: "proyecto", t: "Proyecto" },
-    { k: "material", t: "Material" },
+    { k: "material", t: "Material", tipo: "principal", sub: (f) => proveedorDeMaterial(f.material) },
     { k: "cantidad", t: "Cantidad", num: true },
     { k: "costo",    t: "Costo",    tipo: "dinero", dec: 2, num: true }
   ],
   avances: [
     { k: "fecha",       t: "Fecha",       tipo: "fecha" },
-    { k: "proyecto",    t: "Proyecto" },
+    { k: "proyecto",    t: "Proyecto",    tipo: "principal", sub: (f) => estadoDeProyecto(f.proyecto) },
     { k: "porcentaje",  t: "Avance",      tipo: "porcentaje" },
     { k: "empleado",    t: "Responsable" },
     { k: "descripcion", t: "Descripción" }
@@ -331,6 +331,18 @@ function materialesDeProveedor(nombre) {
   return (datos.materiales || []).filter(
     (m) => String(m.proveedor || "").toLowerCase() === String(nombre).toLowerCase()
   ).length;
+}
+function clienteDeProyecto(nombre) {
+  const p = (datos.proyectos || []).find((x) => x.nombre === nombre);
+  return p ? p.cliente : "";
+}
+function estadoDeProyecto(nombre) {
+  const p = (datos.proyectos || []).find((x) => x.nombre === nombre);
+  return p ? humano(p.estado) : "";
+}
+function proveedorDeMaterial(nombre) {
+  const m = (datos.materiales || []).find((x) => x.nombre === nombre);
+  return m && m.proveedor ? m.proveedor : "";
 }
 function valorDe(fila, col) {
   if (!col) return undefined;
@@ -915,6 +927,54 @@ function pieResumen(nombre) {
   return "";
 }
 
+/* ---------------- actividad reciente ---------------- */
+function actividadHTML(seccion) {
+  const eventos = [];
+
+  (datos.pagos || []).forEach((p) => eventos.push({
+    tipo: "pagos", icono: "pagos", clase: "ok", fecha: p.fecha,
+    titulo: p.proyecto, detalle: `Pago · ${humano(p.metodo)}`,
+    valor: dinero(p.monto)
+  }));
+
+  (datos.avances || []).forEach((a) => eventos.push({
+    tipo: "avances", icono: "avances", clase: "info", fecha: a.fecha,
+    titulo: a.proyecto,
+    detalle: `Avance ${a.porcentaje}%${a.empleado ? " · " + a.empleado : ""}`,
+    valor: `${a.porcentaje}%`
+  }));
+
+  (datos.consumos || []).forEach((c) => eventos.push({
+    tipo: "consumos", icono: "consumos", clase: "", fecha: c.fecha,
+    titulo: c.proyecto,
+    detalle: `${c.material} · ${numero(c.cantidad)} ${c.unidad || ""}`.trim(),
+    valor: dinero(c.costo)
+  }));
+
+  const lista = eventos
+    .filter((e) => e.tipo !== seccion)
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
+    .slice(0, 6);
+
+  if (!lista.length) return "";
+
+  return `
+    <section class="activity">
+      <div class="activity-head">
+        <h3>Actividad reciente</h3>
+        <span class="meta">pagos, avances y consumos de todas las obras</span>
+      </div>
+      <div class="activity-grid">
+        ${lista.map((e) => `
+          <div class="activity-item">
+            <span class="act-ico ${e.clase}">${svg(ICO[e.icono])}</span>
+            <div class="act-txt"><b>${esc(e.titulo)}</b><small>${esc(e.detalle)}</small></div>
+            <div class="act-right"><b>${esc(e.valor)}</b><small>${fecha(e.fecha)}</small></div>
+          </div>`).join("")}
+      </div>
+    </section>`;
+}
+
 /* ---------------- tablas ---------------- */
 function pintarTabla(nombre) {
   const info = TABLAS[nombre];
@@ -937,7 +997,8 @@ function pintarTabla(nombre) {
         <div id="lista"></div>
       </div>
       ${insightsHTML(nombre)}
-    </div>`;
+    </div>
+    ${actividadHTML(nombre)}`;
 
   $("#q").addEventListener("input", (e) => {
     filtros[nombre] = e.target.value;
@@ -998,10 +1059,10 @@ function celda(fila, col) {
     case "persona":
       return `<div class="who-cell">
         <span class="avatar ${variante(v)}">${esc(iniciales(v))}</span>
-        <span class="nm"><b>${esc(v)}</b></span>
+        <span class="nm"><b>${esc(v)}</b>${col.sub && col.sub(fila) ? `<small>${esc(col.sub(fila))}</small>` : ""}</span>
       </div>`;
     case "principal":
-      return `<span class="strong">${esc(v)}</span>`;
+      return `<span class="strong">${esc(v)}</span>${col.sub && col.sub(fila) ? `<small class="cell-sub">${esc(col.sub(fila))}</small>` : ""}`;
     case "estado":
       return `<span class="badge b-${esc(v)}">${esc(humano(v))}</span>`;
     case "puesto":

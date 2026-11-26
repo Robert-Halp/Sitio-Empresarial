@@ -169,8 +169,13 @@ con `Accept-Profile: constructora`. Incluye KPIs, dona de estados, buscador, ord
 exportación a CSV y **formularios de alta y edición** que escriben en la base de datos.
 
 Cada sección muestra **columnas derivadas** (avance por obra, número de obras por cliente,
-valor del inventario, materiales por proveedor) y un **panel de resumen** con métricas y
+valor del inventario, materiales por proveedor), **detalle bajo el nombre** (dirección, email,
+cliente del pago, proveedor del material) y un **panel de resumen** con métricas y
 mini-gráficos de la sección; en pantallas anchas va al lado derecho y en laptops debajo de la tabla.
+Debajo se añade una franja de **actividad reciente** (pagos, avances y consumos de todas las obras).
+
+Los datos de ejemplo se ampliaron en `20261126215900_datos_demo_extra.sql` para que las tablas
+tengan volumen realista (6–13 filas por sección).
 
 **Tiempo real:** las 9 tablas están publicadas en `supabase_realtime`; el panel se suscribe con
 `@supabase/supabase-js` (CDN) y se refresca solo cuando cambia un registro, venga del propio
