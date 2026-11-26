@@ -57,12 +57,14 @@ const COLS = {
     { k: "email",     t: "Email" },
     { k: "telefono",  t: "Teléfono" },
     { k: "direccion", t: "Dirección" },
+    { k: "obras",     t: "Obras",    tipo: "calc", calc: (f) => obrasDeCliente(f.nombre), num: true, formato: "num" },
     { k: "creado_en", t: "Alta",     tipo: "fecha" }
   ],
   proyectos: [
     { k: "nombre",        t: "Proyecto",    tipo: "principal" },
     { k: "cliente",       t: "Cliente" },
     { k: "estado",        t: "Estado",      tipo: "estado" },
+    { k: "avance",        t: "Avance",      tipo: "calc", calc: (f) => avanceDeProyecto(f.nombre), render: "pct", num: true },
     { k: "presupuesto",   t: "Presupuesto", tipo: "dinero", dec: 0, num: true },
     { k: "fecha_inicio",  t: "Inicio",      tipo: "fecha" },
     { k: "fecha_entrega", t: "Entrega",     tipo: "fecha" }
@@ -71,6 +73,7 @@ const COLS = {
     { k: "nombre",        t: "Empleado",   tipo: "persona" },
     { k: "puesto",        t: "Puesto",     tipo: "puesto" },
     { k: "telefono",      t: "Teléfono" },
+    { k: "obras",         t: "Obras",      tipo: "calc", calc: (f) => obrasDeEmpleado(f.nombre), num: true, formato: "num" },
     { k: "activo",        t: "Activo",     tipo: "bool" },
     { k: "contratado_en", t: "Contratado", tipo: "fecha" }
   ],
@@ -87,14 +90,16 @@ const COLS = {
     { k: "unidad",          t: "Unidad" },
     { k: "precio_unitario", t: "Precio unit.", tipo: "dinero", dec: 2, num: true },
     { k: "stock",           t: "Stock",       tipo: "stock", num: true },
+    { k: "valor",           t: "Valor",       tipo: "calc", calc: valorInventario, num: true, formato: "dinero" },
     { k: "proveedor",       t: "Proveedor" }
   ],
   proveedores: [
-    { k: "nombre",   t: "Proveedor", tipo: "principal" },
-    { k: "contacto", t: "Contacto" },
-    { k: "telefono", t: "Teléfono" },
-    { k: "email",    t: "Email" },
-    { k: "activo",   t: "Activo",    tipo: "bool" }
+    { k: "nombre",     t: "Proveedor", tipo: "principal" },
+    { k: "contacto",   t: "Contacto" },
+    { k: "telefono",   t: "Teléfono" },
+    { k: "email",      t: "Email" },
+    { k: "materiales", t: "Materiales", tipo: "calc", calc: (f) => materialesDeProveedor(f.nombre), num: true, formato: "num" },
+    { k: "activo",     t: "Activo",    tipo: "bool" }
   ],
   pagos: [
     { k: "fecha",      t: "Fecha",     tipo: "fecha" },
@@ -301,6 +306,37 @@ function diasHasta(f) {
   return Math.round((d - h) / 86400000);
 }
 const variante = (s) => "a" + ((String(s).length % 4) + 1);
+
+/* ---------------- datos derivados ---------------- */
+function obrasDeCliente(nombre) {
+  return (datos.proyectos || []).filter((p) => p.cliente === nombre).length;
+}
+function avanceDeProyecto(nombre) {
+  const arr = (datos.avances || []).filter((a) => a.proyecto === nombre);
+  if (!arr.length) return null;
+  return arr.reduce((max, a) => (String(a.fecha) > String(max.fecha) ? a : max), arr[0]).porcentaje;
+}
+function cobradoDeProyecto(nombre) {
+  return (datos.pagos || [])
+    .filter((p) => p.proyecto === nombre && p.estado === "pagado")
+    .reduce((s, p) => s + Number(p.monto || 0), 0);
+}
+function obrasDeEmpleado(nombre) {
+  return (datos.asignaciones || []).filter((a) => a.empleado === nombre).length;
+}
+function valorInventario(fila) {
+  return Number(fila.stock || 0) * Number(fila.precio_unitario || 0);
+}
+function materialesDeProveedor(nombre) {
+  return (datos.materiales || []).filter(
+    (m) => String(m.proveedor || "").toLowerCase() === String(nombre).toLowerCase()
+  ).length;
+}
+function valorDe(fila, col) {
+  if (!col) return undefined;
+  return col.calc ? col.calc(fila) : fila[col.k];
+}
+const pctHTML = (v) => `<span class="pct"><span class="pct-track"><i style="width:${Number(v)}%"></i></span><b>${Number(v)}%</b></span>`;
 
 /* ---------------- API ---------------- */
 function cabeceras(extra = {}) {
@@ -672,25 +708,235 @@ function entregaItem(x) {
     </div>`;
 }
 
+/* ---------------- panel lateral de resumen ---------------- */
+function dineroCorto(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1e6) return "$" + (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (Math.abs(n) >= 1e3) return "$" + Math.round(n / 1e3) + "k";
+  return dinero(n);
+}
+const hayDatos = `<p class="muted" style="font-size:12px">Sin datos todavía.</p>`;
+const insCard = (titulo, cuerpo) => `<div class="insight-card"><h3>${esc(titulo)}</h3>${cuerpo}</div>`;
+const statGrid = (items) => `<div class="stat-grid">${items.join("")}</div>`;
+const stat = (lbl, val, cls = "") => `<div class="stat ${cls}"><span>${esc(lbl)}</span><b>${val}</b></div>`;
+
+function grupoSuma(arr, clave, valor) {
+  const m = new Map();
+  arr.forEach((x) => {
+    const k = clave(x);
+    if (k === null || k === undefined || k === "") return;
+    m.set(k, (m.get(k) || 0) + Number(valor(x) || 0));
+  });
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function insBars(items, max, formato = (v) => numero(v), clase = "") {
+  if (!items.length) return hayDatos;
+  return items.map(([nombre, valor]) => `
+    <div class="ins-bar">
+      <div class="ins-bar-top"><span>${esc(nombre)}</span><b>${formato(valor)}</b></div>
+      <div class="track"><div class="fill ${clase}" style="width:${max ? Math.max(4, (valor / max) * 100) : 0}%"></div></div>
+    </div>`).join("");
+}
+
+function insightsHTML(nombre) {
+  const d = datos;
+  let cuerpo = "";
+
+  if (nombre === "clientes") {
+    const proy = d.proyectos || [];
+    const cartera = proy.reduce((s, p) => s + (Number(p.presupuesto) || 0), 0);
+    const conObra = new Set(proy.map((p) => p.cliente)).size;
+    const total = (d.clientes || []).length;
+    const top = grupoSuma(proy, (p) => p.cliente, (p) => p.presupuesto).slice(0, 4);
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Total", numero(total)),
+      stat("Con obra", numero(conObra), "ok"),
+      stat("Sin obra", numero(Math.max(0, total - conObra))),
+      stat("Cartera", dineroCorto(cartera))
+    ])) + insCard("Cartera por cliente", insBars(top, top[0]?.[1] || 1, (v) => dinero(v)));
+  }
+
+  if (nombre === "proyectos") {
+    const p = d.proyectos || [];
+    const enObra = p.filter((x) => !["entregado", "cancelado"].includes(x.estado)).length;
+    const presupuesto = p.reduce((s, x) => s + (Number(x.presupuesto) || 0), 0);
+    const cobrado = (d.pagos || []).filter((x) => x.estado === "pagado").reduce((s, x) => s + Number(x.monto || 0), 0);
+    const avances = p.map((x) => avanceDeProyecto(x.nombre)).filter((v) => v !== null);
+    const prom = avances.length ? Math.round(avances.reduce((a, b) => a + Number(b), 0) / avances.length) : 0;
+    const lista = p.map((x) => [x.nombre, avanceDeProyecto(x.nombre) ?? 0]).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    cuerpo = insCard("Resumen", statGrid([
+      stat("En obra", numero(enObra)),
+      stat("Cobrado", dineroCorto(cobrado), "ok"),
+      stat("Presupuesto", dineroCorto(presupuesto)),
+      stat("Avance prom.", prom + "%")
+    ])) + insCard("Avance por obra", insBars(lista, 100, (v) => v + "%"));
+  }
+
+  if (nombre === "empleados") {
+    const e = d.empleados || [];
+    const activos = e.filter((x) => x.activo).length;
+    const puestos = grupoSuma(e, (x) => x.puesto, () => 1);
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Total", numero(e.length)),
+      stat("Activos", numero(activos), "ok"),
+      stat("Inactivos", numero(e.length - activos), activos === e.length ? "" : "warn"),
+      stat("Asignaciones", numero((d.asignaciones || []).length))
+    ])) + insCard("Por puesto", insBars(puestos, puestos[0]?.[1] || 1));
+  }
+
+  if (nombre === "asignaciones") {
+    const a = d.asignaciones || [];
+    const horas = a.reduce((s, x) => s + (Number(x.horas_semanales) || 0), 0);
+    const personas = new Set(a.map((x) => x.empleado)).size;
+    const obras = new Set(a.map((x) => x.proyecto)).size;
+    const porObra = grupoSuma(a, (x) => x.proyecto, (x) => x.horas_semanales).slice(0, 5);
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Registros", numero(a.length)),
+      stat("Personas", numero(personas)),
+      stat("Obras", numero(obras)),
+      stat("Horas/sem", numero(horas))
+    ])) + insCard("Horas por obra", insBars(porObra, porObra[0]?.[1] || 1, (v) => v + " h"));
+  }
+
+  if (nombre === "materiales") {
+    const m = d.materiales || [];
+    const valor = m.reduce((s, x) => s + valorInventario(x), 0);
+    const bajo = m.filter((x) => Number(x.stock) < 120).length;
+    const provs = new Set(m.map((x) => x.proveedor).filter(Boolean)).size;
+    const top = m.map((x) => [x.nombre, valorInventario(x)]).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Materiales", numero(m.length)),
+      stat("Inventario", dineroCorto(valor)),
+      stat("Bajo stock", numero(bajo), bajo ? "warn" : "ok"),
+      stat("Proveedores", numero(provs))
+    ])) + insCard("Mayor valor en stock", insBars(top, top[0]?.[1] || 1, (v) => dinero(v)));
+  }
+
+  if (nombre === "proveedores") {
+    const p = d.proveedores || [];
+    const activos = p.filter((x) => x.activo).length;
+    const conEmail = p.filter((x) => x.email).length;
+    const totalMat = p.reduce((s, x) => s + materialesDeProveedor(x.nombre), 0);
+    const lista = p.map((x) => [x.nombre, materialesDeProveedor(x.nombre)]).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Total", numero(p.length)),
+      stat("Activos", numero(activos), "ok"),
+      stat("Con email", numero(conEmail)),
+      stat("Materiales", numero(totalMat))
+    ])) + insCard("Materiales por proveedor", insBars(lista, lista[0]?.[1] || 1));
+  }
+
+  if (nombre === "pagos") {
+    const pg = d.pagos || [];
+    const pagados = pg.filter((x) => x.estado === "pagado");
+    const cobrado = pagados.reduce((s, x) => s + Number(x.monto || 0), 0);
+    const pendiente = pg.filter((x) => x.estado === "pendiente").reduce((s, x) => s + Number(x.monto || 0), 0);
+    const ticket = pagados.length ? cobrado / pagados.length : 0;
+    const ultimos = [...pg].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 4);
+    const lista = ultimos.map((x) => `
+      <div class="ins-row">
+        <span>${esc(x.proyecto)}<small>${fecha(x.fecha)} · ${esc(humano(x.metodo))}</small></span>
+        <b>${dinero(x.monto)}</b>
+      </div>`).join("");
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Cobrado", dineroCorto(cobrado), "ok"),
+      stat("Pendiente", dineroCorto(pendiente), pendiente ? "warn" : ""),
+      stat("Pagos", numero(pg.length)),
+      stat("Ticket prom.", dineroCorto(ticket))
+    ])) + insCard("Últimos pagos", lista || hayDatos);
+  }
+
+  if (nombre === "consumos") {
+    const c = d.consumos || [];
+    const costo = c.reduce((s, x) => s + Number(x.costo || 0), 0);
+    const obras = new Set(c.map((x) => x.proyecto)).size;
+    const mats = new Set(c.map((x) => x.material)).size;
+    const top = grupoSuma(c, (x) => x.material, (x) => x.costo).slice(0, 4);
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Registros", numero(c.length)),
+      stat("Costo", dineroCorto(costo)),
+      stat("Obras", numero(obras)),
+      stat("Materiales", numero(mats))
+    ])) + insCard("Costo por material", insBars(top, top[0]?.[1] || 1, (v) => dinero(v)));
+  }
+
+  if (nombre === "avances") {
+    const a = d.avances || [];
+    const p = d.proyectos || [];
+    const porObra = p.map((x) => [x.nombre, avanceDeProyecto(x.nombre)]).filter(([, v]) => v !== null).sort((x, y) => y[1] - x[1]).slice(0, 5);
+    const prom = porObra.length ? Math.round(porObra.reduce((s, [, v]) => s + Number(v), 0) / porObra.length) : 0;
+    const ultimo = [...a].sort((x, y) => String(y.fecha).localeCompare(String(x.fecha)))[0];
+    cuerpo = insCard("Resumen", statGrid([
+      stat("Reportes", numero(a.length)),
+      stat("Obras", numero(porObra.length)),
+      stat("Promedio", prom + "%"),
+      stat("Último", ultimo ? fecha(ultimo.fecha) : "—")
+    ])) + insCard("Avance por obra", insBars(porObra, 100, (v) => v + "%"));
+  }
+
+  return `<aside class="insights">${cuerpo}</aside>`;
+}
+
+function pieResumen(nombre) {
+  const d = datos;
+  if (nombre === "clientes") {
+    return "Cartera: " + dinero((d.proyectos || []).reduce((s, p) => s + (Number(p.presupuesto) || 0), 0));
+  }
+  if (nombre === "proyectos") {
+    return "Presupuesto total: " + dinero((d.proyectos || []).reduce((s, p) => s + (Number(p.presupuesto) || 0), 0));
+  }
+  if (nombre === "empleados") {
+    const e = d.empleados || [];
+    return "Activos: " + e.filter((x) => x.activo).length + " de " + e.length;
+  }
+  if (nombre === "asignaciones") {
+    return "Horas/sem totales: " + numero((d.asignaciones || []).reduce((s, x) => s + (Number(x.horas_semanales) || 0), 0));
+  }
+  if (nombre === "materiales") {
+    return "Valor del inventario: " + dinero((d.materiales || []).reduce((s, x) => s + valorInventario(x), 0));
+  }
+  if (nombre === "proveedores") {
+    const p = d.proveedores || [];
+    return "Activos: " + p.filter((x) => x.activo).length + " de " + p.length;
+  }
+  if (nombre === "pagos") {
+    return "Cobrado: " + dinero((d.pagos || []).filter((x) => x.estado === "pagado").reduce((s, x) => s + Number(x.monto || 0), 0));
+  }
+  if (nombre === "consumos") {
+    return "Costo total: " + dinero((d.consumos || []).reduce((s, x) => s + Number(x.costo || 0), 0));
+  }
+  if (nombre === "avances") {
+    const p = d.proyectos || [];
+    const v = p.map((x) => avanceDeProyecto(x.nombre)).filter((x) => x !== null);
+    const prom = v.length ? Math.round(v.reduce((a, b) => a + Number(b), 0) / v.length) : 0;
+    return "Avance promedio: " + prom + "%";
+  }
+  return "";
+}
+
 /* ---------------- tablas ---------------- */
 function pintarTabla(nombre) {
   const info = TABLAS[nombre];
 
   $("#vista").innerHTML = `
-    <div class="panel">
-      <div class="panel-head">
-        <div class="search">
-          ${svg(ICO.buscar)}
-          <input id="q" type="search" placeholder="Buscar en ${esc(info.titulo.toLowerCase())}…"
-                 value="${esc(filtros[nombre])}" aria-label="Buscar en ${esc(info.titulo)}">
+    <div class="panel-layout">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="search">
+            ${svg(ICO.buscar)}
+            <input id="q" type="search" placeholder="Buscar en ${esc(info.titulo.toLowerCase())}…"
+                   value="${esc(filtros[nombre])}" aria-label="Buscar en ${esc(info.titulo)}">
+          </div>
+          <div class="panel-tools">
+            <span class="meta muted" id="meta-count"></span>
+            <button class="btn ghost" id="csv" type="button">${svg(ICO.bajar)}<span>Exportar</span></button>
+            <button class="btn primary" id="nuevo" type="button">${svg(ICO.mas)}<span>Nuevo</span></button>
+          </div>
         </div>
-        <div class="panel-tools">
-          <span class="meta muted" id="meta-count"></span>
-          <button class="btn ghost" id="csv" type="button">${svg(ICO.bajar)}<span>Exportar</span></button>
-          <button class="btn primary" id="nuevo" type="button">${svg(ICO.mas)}<span>Nuevo</span></button>
-        </div>
+        <div id="lista"></div>
       </div>
-      <div id="lista"></div>
+      ${insightsHTML(nombre)}
     </div>`;
 
   $("#q").addEventListener("input", (e) => {
@@ -726,7 +972,7 @@ function filasVisibles(nombre) {
 
   if (q) {
     filas = filas.filter((f) => cols.some((c) => {
-      const v = f[c.k];
+      const v = valorDe(f, c);
       const s = typeof v === "boolean" ? (v ? "si" : "no") : String(v ?? "").toLowerCase();
       return s.includes(q);
     }));
@@ -735,7 +981,7 @@ function filasVisibles(nombre) {
   const { k, dir } = orden[nombre];
   const col = cols.find((c) => c.k === k) || cols[0];
   filas.sort((a, b) => {
-    const va = a[col.k], vb = b[col.k];
+    const va = valorDe(a, col), vb = valorDe(b, col);
     if (col.tipo === "dinero" || col.num || col.tipo === "stock" || col.tipo === "porcentaje") {
       return ((Number(va) || 0) - (Number(vb) || 0)) * dir;
     }
@@ -745,7 +991,7 @@ function filasVisibles(nombre) {
 }
 
 function celda(fila, col) {
-  const v = fila[col.k];
+  const v = valorDe(fila, col);
   if (v === null || v === undefined || v === "") return `<span class="muted">—</span>`;
 
   switch (col.tipo) {
@@ -769,7 +1015,11 @@ function celda(fila, col) {
     case "stock":
       return `<span class="${Number(v) < 120 ? "low" : ""}">${numero(v)}</span>`;
     case "porcentaje":
-      return `<span class="pct"><span class="pct-track"><i style="width:${Number(v)}%"></i></span><b>${Number(v)}%</b></span>`;
+      return pctHTML(v);
+    case "calc":
+      if (col.render === "pct") return pctHTML(v);
+      if (col.formato === "dinero") return dinero(v, col.dec ?? 0);
+      return numero(v);
     default:
       return esc(v);
   }
@@ -809,7 +1059,7 @@ function pintarFilas(nombre) {
     </div>
     <div class="panel-foot">
       <span>Mostrando <strong>${filas.length}</strong> de ${total}</span>
-      <span>Los cambios se guardan en la base de datos</span>
+      <span class="pie-total">${pieResumen(nombre)}</span>
     </div>`;
 }
 
@@ -944,7 +1194,8 @@ function toast(texto, tipo = "ok") {
 function descargarCSV(nombre) {
   const cols = COLS[nombre];
   const filas = filasVisibles(nombre);
-  const celdaCSV = (v) => {
+  const celdaCSV = (fila, col) => {
+    const v = valorDe(fila, col);
     if (v === null || v === undefined) return "";
     if (typeof v === "boolean") return v ? "Sí" : "No";
     return String(v).replace(/"/g, '""');
@@ -952,7 +1203,7 @@ function descargarCSV(nombre) {
   const linea = (arr) => arr.map((x) => (/[";\n]/.test(x) ? `"${x}"` : x)).join(";");
 
   const contenido = "\ufeff" + [linea(cols.map((c) => c.t))]
-    .concat(filas.map((f) => linea(cols.map((c) => celdaCSV(f[c.k])))))
+    .concat(filas.map((f) => linea(cols.map((c) => celdaCSV(f, c)))))
     .join("\r\n");
 
   const blob = new Blob([contenido], { type: "text/csv;charset=utf-8" });

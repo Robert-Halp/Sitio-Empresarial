@@ -168,6 +168,10 @@ verdad hay que sustituirlo por Supabase Auth. Se aplica en
 con `Accept-Profile: constructora`. Incluye KPIs, dona de estados, buscador, orden por columna,
 exportación a CSV y **formularios de alta y edición** que escriben en la base de datos.
 
+Cada sección muestra **columnas derivadas** (avance por obra, número de obras por cliente,
+valor del inventario, materiales por proveedor) y un **panel de resumen** con métricas y
+mini-gráficos de la sección; en pantallas anchas va al lado derecho y en laptops debajo de la tabla.
+
 **Tiempo real:** las 9 tablas están publicadas en `supabase_realtime`; el panel se suscribe con
 `@supabase/supabase-js` (CDN) y se refresca solo cuando cambia un registro, venga del propio
 panel o del *Table Editor*. Si el CDN no carga, cae a sondeo cada 15 s.
