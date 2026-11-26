@@ -154,10 +154,11 @@ El panel **lee** de 9 vistas que resuelven las relaciones y **escribe** en las t
 | `constructora.vista_consumos` | Material + cantidad + costo calculado |
 | `constructora.vista_avances` | Avance + proyecto + responsable |
 
-**Modo demo:** `anon` tiene `SELECT`, `INSERT` y `UPDATE` sobre las 9 tablas operativas
-(sin `DELETE`). Cualquiera con la URL puede crear o editar registros; antes de publicar de
-verdad hay que sustituirlo por Supabase Auth. Se aplica en
-`20261126210759_ampliar_constructora.sql`.
+**Acceso privado:** el panel exige iniciar sesión con **Supabase Auth** (correo + contraseña).
+`anon` ya no tiene permisos sobre el schema `constructora`; solo el rol `authenticated` puede
+leer y escribir, y `nomina` sigue reservada a `service_role`. Las cuentas se crean desde
+*Authentication → Users* del dashboard o con el Admin API (`POST /auth/v1/admin/users`
+con `email_confirm: true`). No se guardan contraseñas en el repositorio.
 
 ## Panel de operaciones (dashboard)
 
@@ -167,6 +168,9 @@ verdad hay que sustituirlo por Supabase Auth. Se aplica en
 `docs/` contiene un dashboard estático (HTML + CSS + JS, sin build) que consume las 9 vistas
 con `Accept-Profile: constructora`. Incluye KPIs, dona de estados, buscador, orden por columna,
 exportación a CSV y **formularios de alta y edición** que escriben en la base de datos.
+
+El acceso está protegido con **Supabase Auth**: pantalla de login, sesión persistente,
+cierre de sesión y sincronización en tiempo real con el token del usuario autenticado.
 
 Cada sección muestra **columnas derivadas** (avance por obra, número de obras por cliente,
 valor del inventario, materiales por proveedor), **detalle bajo el nombre** (dirección, email,
@@ -246,8 +250,7 @@ npx serve .          # o abre index.html directamente en el navegador
 - `SUPABASE_SERVICE_ROLE_KEY` omite RLS → **solo en servidor**.
 - Activa **RLS en todas las tablas** y escribe políticas explícitas.
 - No expongas tablas nuevas automáticamente; da permisos a mano.
-- **Modo demo:** el panel permite a `anon` insertar y actualizar en las 9 tablas operativas
-  para poder demostrar el CRUD. Eso significa que cualquiera con la URL puede modificar datos.
-  No hay `DELETE` para `anon`. Para un entorno real: activar Supabase Auth, cambiar las políticas
-  a `to authenticated` y retirar los permisos de escritura a `anon`.
+- **Acceso al panel:** solo usuarios de Supabase Auth (`authenticated`). `anon` no tiene
+  permisos sobre `constructora` desde `20261126221329_acceso_privado.sql`. Crea o elimina
+  usuarios desde *Authentication → Users*; las contraseñas se gestionan ahí, nunca en Git.
 - `nomina` (salarios) está fuera del panel: solo `service_role` tiene acceso.

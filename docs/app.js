@@ -269,6 +269,12 @@ let toastPendiente = false;
 let animarEntrada = true;
 let navLista = false;
 
+/* sesión */
+let sb = null;
+let sesion = null;
+let canalRT = null;
+let canalPolling = null;
+
 /* ---------------- utilidades ---------------- */
 const $ = (s) => document.querySelector(s);
 
@@ -352,9 +358,10 @@ const pctHTML = (v) => `<span class="pct"><span class="pct-track"><i style="widt
 
 /* ---------------- API ---------------- */
 function cabeceras(extra = {}) {
+  const jwt = sesion && sesion.access_token ? sesion.access_token : CFG.key;
   return {
     apikey: CFG.key,
-    Authorization: `Bearer ${CFG.key}`,
+    Authorization: `Bearer ${jwt}`,
     "Accept-Profile": CFG.schema,
     "Content-Profile": CFG.schema,
     ...extra
@@ -671,7 +678,7 @@ function animarContadores() {
     const t0 = performance.now();
     const dur = 850;
     const paso = (t) => {
-      const p = Math.min(1, (t - t0) / dur);
+      const p = Math.min(1, Math.max(0, (t - t0) / dur));
       pintarNum(Math.round(fin * (1 - Math.pow(1 - p, 3))));
       if (p < 1) requestAnimationFrame(paso);
     };
@@ -1300,26 +1307,148 @@ function marcarActualizado() {
   setTimeout(() => el.classList.remove("flash"), 1200);
 }
 
-async function iniciarTiempoReal() {
+function iniciarTiempoReal() {
+  if (!sb || canalRT) return;
+  try { if (sesion) sb.realtime.setAuth(sesion.access_token); } catch (_) {}
+
+  canalRT = sb.channel("panel-constructora")
+    .on("postgres_changes", { event: "*", schema: CFG.schema }, () => {
+      const propio = Date.now() - ultimaAccionPropia < 2000;
+      programarRefresco(propio);
+    })
+    .subscribe((estado) => {
+      realtimeActivo = estado === "SUBSCRIBED";
+      if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") iniciarPolling();
+      pintarLive();
+    });
+}
+
+function iniciarPolling() {
+  if (canalPolling) return;
+  canalPolling = setInterval(() => {
+    if (!document.hidden && sesion) cargarTodo(true);
+  }, 15000);
+}
+
+/* ---------------- autenticación ---------------- */
+function mostrarErrorLogin(msg) {
+  const el = $("#login-error");
+  if (!el) return;
+  el.textContent = msg;
+  el.hidden = false;
+}
+function ocultarErrorLogin() {
+  const el = $("#login-error");
+  if (el) el.hidden = true;
+}
+
+function mostrarLogin() {
+  sesion = null;
+  const app = $("#app");
+  const login = $("#login");
+  if (app) app.hidden = true;
+  if (login) login.hidden = false;
+  document.body.classList.add("login-open");
+}
+
+function entrarApp(session) {
+  sesion = session;
+  $("#login").hidden = true;
+  $("#app").hidden = false;
+  document.body.classList.remove("login-open");
+
+  const user = session.user || {};
+  const nombre = (user.user_metadata && user.user_metadata.nombre) || (user.email || "").split("@")[0] || "Usuario";
+
+  $("#side-user").hidden = false;
+  $("#user-name").textContent = nombre;
+  $("#user-email").textContent = user.email || "";
+  $("#user-avatar").textContent = iniciales(nombre);
+
+  ocultarErrorLogin();
+  cargarTodo();
+  iniciarTiempoReal();
+}
+
+function salirApp() {
+  if (canalRT && sb) { try { sb.removeChannel(canalRT); } catch (_) {} }
+  canalRT = null;
+  if (canalPolling) { clearInterval(canalPolling); canalPolling = null; }
+  realtimeActivo = false;
+  sesion = null;
+
+  const user = $("#side-user");
+  if (user) user.hidden = true;
+  mostrarLogin();
+
+  const pass = $("#login-pass");
+  if (pass) pass.value = "";
+}
+
+async function hacerLogin(e) {
+  e.preventDefault();
+  if (!sb) { mostrarErrorLogin("El módulo de acceso aún no está listo. Recarga la página."); return; }
+
+  const email = $("#login-email").value.trim();
+  const pass = $("#login-pass").value;
+  const btn = $("#login-btn");
+
+  ocultarErrorLogin();
+  if (!email || !pass) { mostrarErrorLogin("Escribe tu correo y tu contraseña."); return; }
+
+  btn.disabled = true;
+  btn.textContent = "Entrando…";
+
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) {
+      const msg = /invalid/i.test(error.message)
+        ? "Correo o contraseña incorrectos."
+        : error.message;
+      mostrarErrorLogin(msg);
+      return;
+    }
+    entrarApp(data.session);
+  } catch (err) {
+    mostrarErrorLogin("No se pudo iniciar sesión: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Entrar";
+  }
+}
+
+async function hacerLogout() {
+  try { if (sb) await sb.auth.signOut(); } catch (_) {}
+  salirApp();
+}
+
+async function arrancarAuth() {
   try {
     const mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
-    const sb = mod.createClient(CFG.url, CFG.key, { db: { schema: CFG.schema } });
-
-    sb.channel("panel-constructora")
-      .on("postgres_changes", { event: "*", schema: CFG.schema }, () => {
-        const propio = Date.now() - ultimaAccionPropia < 2000;
-        programarRefresco(propio);
-      })
-      .subscribe((estado) => {
-        realtimeActivo = estado === "SUBSCRIBED";
-        pintarLive();
-      });
+    sb = mod.createClient(CFG.url, CFG.key, {
+      db: { schema: CFG.schema },
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
   } catch (e) {
-    // Sin CDN: se mantiene el panel funcional con refresco periódico.
-    realtimeActivo = false;
-    pintarLive();
-    setInterval(() => { if (!document.hidden) cargarTodo(true); }, 15000);
+    mostrarLogin();
+    mostrarErrorLogin("No se pudo cargar el módulo de acceso. Revisa tu conexión y recarga la página.");
+    return;
   }
+
+  const art = $("#login-art");
+  if (art) art.innerHTML = artObra();
+
+  sb.auth.onAuthStateChange((evento, session) => {
+    if (evento === "SIGNED_OUT") { salirApp(); return; }
+    if (session) sesion = session;
+    if (evento === "TOKEN_REFRESHED" && session) {
+      try { sb.realtime.setAuth(session.access_token); } catch (_) {}
+    }
+  });
+
+  const { data } = await sb.auth.getSession();
+  if (data.session) entrarApp(data.session);
+  else mostrarLogin();
 }
 
 /* ---------------- navegación ---------------- */
@@ -1348,6 +1477,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("#refrescar").addEventListener("click", () => cargarTodo(true));
 
+  $("#login-form").addEventListener("submit", hacerLogin);
+  $("#toggle-pass").addEventListener("click", () => {
+    const inp = $("#login-pass");
+    const ver = inp.type === "password";
+    inp.type = ver ? "text" : "password";
+    $("#toggle-pass").textContent = ver ? "Ocultar" : "Ver";
+  });
+  $("#logout").addEventListener("click", hacerLogout);
+
   $("#modal-close").addEventListener("click", cerrarModal);
   $("#modal-cancel").addEventListener("click", cerrarModal);
   $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") cerrarModal(); });
@@ -1362,5 +1500,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if ((h === "resumen" || TABLAS[h]) && h !== pestaña) { pestaña = h; pintar(); }
   });
 
-  cargarTodo().then(iniciarTiempoReal);
+  mostrarLogin();
+  arrancarAuth();
 });
