@@ -261,6 +261,8 @@ let formActual = null;          // { nombre, fila }
 let ultimaAccionPropia = 0;
 let timerRefresco = null;
 let toastPendiente = false;
+let animarEntrada = true;
+let navLista = false;
 
 /* ---------------- utilidades ---------------- */
 const $ = (s) => document.querySelector(s);
@@ -370,7 +372,9 @@ async function cargarTodo(esRefresco = false) {
 
   cargando = false;
   refrescando = false;
+  animarEntrada = !esRefresco;
   pintar();
+  animarEntrada = false;
 }
 
 function bloquearBoton(activo) {
@@ -392,7 +396,7 @@ function pintar() {
   pintarAviso();
 
   if (cargando) {
-    $("#vista").innerHTML = `<div class="panel"><div class="loading"><div class="spinner"></div>Cargando datos de la constructora…</div></div>`;
+    $("#vista").innerHTML = esqueleto();
     return;
   }
   if (error && !datos.clientes) { $("#vista").innerHTML = ""; return; }
@@ -400,6 +404,7 @@ function pintar() {
   if (pestaña === "resumen") pintarResumen();
   else pintarTabla(pestaña);
 
+  if (animarEntrada) animarContadores();
   bloquearBoton(refrescando);
 
   if (eraBusqueda) {
@@ -409,15 +414,25 @@ function pintar() {
 }
 
 function pintarNav() {
-  const items = [["resumen", "Resumen", "resumen", null]];
-  Object.entries(TABLAS).forEach(([k, v]) => items.push([k, v.titulo, v.icono, datos[k] ? datos[k].length : null]));
+  if (!navLista) {
+    const items = [["resumen", "Resumen", "resumen"], ...Object.entries(TABLAS).map(([k, v]) => [k, v.titulo, v.icono])];
+    $("#nav").innerHTML = items.map(([k, t, ico]) => `
+      <button class="nav-item" data-tab="${k}" aria-current="false">
+        ${svg(ICO[ico])}
+        <span>${t}</span>
+        ${k === "resumen" ? "" : `<span class="count">—</span>`}
+      </button>`).join("");
+    navLista = true;
+  }
 
-  $("#nav").innerHTML = items.map(([k, t, ico, n]) => `
-    <button class="nav-item" data-tab="${k}" aria-current="${pestaña === k ? "page" : "false"}">
-      ${svg(ICO[ico])}
-      <span>${t}</span>
-      ${n === null ? "" : `<span class="count">${n}</span>`}
-    </button>`).join("");
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    const k = btn.dataset.tab;
+    btn.setAttribute("aria-current", k === pestaña ? "page" : "false");
+    if (k !== "resumen") {
+      const c = btn.querySelector(".count");
+      if (c) c.textContent = datos[k] ? datos[k].length : "—";
+    }
+  });
 }
 
 function pintarCabecera() {
@@ -475,10 +490,12 @@ function pintarResumen() {
   const pendiente = pagos.filter((x) => x.estado === "pendiente").reduce((s, x) => s + Number(x.monto || 0), 0);
 
   $("#vista").innerHTML = `
+    ${heroResumen(enObra, cobrado, bajo)}
+
     <section class="kpis">
       ${kpi("clientes", "Clientes", (datos.clientes || []).length, "registrados en el sistema", "blue")}
       ${kpi("proyectos", "Proyectos en obra", enObra.length, `de ${p.length} en total`, "green")}
-      ${kpi("dinero", "Cartera en obra", dinero(cartera), "presupuesto de obras activas", "amber")}
+      ${kpi("dinero", "Cartera en obra", cartera, "presupuesto de obras activas", "", false, "money")}
       ${kpi("alerta", "Materiales por reponer", bajo.length, "stock menor a 120", bajo.length ? "red" : "", bajo.length > 0)}
     </section>
 
@@ -486,7 +503,7 @@ function pintarResumen() {
       <div class="card">
         <div class="card-head"><h3>Proyectos por estado</h3><span class="meta">${p.length} en total</span></div>
         <div class="donut-wrap">
-          <div class="donut">
+          <div class="donut ${animarEntrada ? "anim" : ""}">
             <svg viewBox="0 0 168 168" role="img" aria-label="Proyectos por estado">
               ${dona(conteo, p.length)}
             </svg>
@@ -537,16 +554,89 @@ function pintarResumen() {
     </section>`;
 }
 
-function kpi(icono, etiqueta, valor, pista, color = "", warn = false) {
+function kpi(icono, etiqueta, valor, pista, color = "", warn = false, formato = "num") {
+  const esNum = typeof valor === "number";
+  const animable = esNum && animarEntrada;
+  const texto = esNum ? (formato === "money" ? dinero(valor) : numero(valor)) : valor;
   return `
     <article class="kpi ${warn ? "warn" : ""}">
       <div class="kpi-top">
         <span class="chip ${color}">${svg(ICO[icono])}</span>
         <span class="lbl">${esc(etiqueta)}</span>
       </div>
-      <div class="val">${typeof valor === "number" ? numero(valor) : valor}</div>
+      <div class="val" ${animable ? `data-count="${valor}" data-formato="${formato}"` : ""}>${texto}</div>
       <div class="hint">${esc(pista)}</div>
     </article>`;
+}
+
+function heroResumen(enObra, cobrado, bajo) {
+  const fecha = new Date().toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+  const materiales = `${bajo.length} material${bajo.length === 1 ? "" : "es"} por reponer`;
+  return `
+    <section class="hero">
+      <div class="hero-txt">
+        <span class="hero-badge"><span class="dot-mini"></span> Operación al día · ${esc(fecha)}</span>
+        <h2>Tu obra, bajo control.</h2>
+        <p><strong>${enObra.length} obras activas</strong> · <strong>${dinero(cobrado)}</strong> cobrados · ${materiales}.</p>
+        <div class="hero-actions">
+          <button class="btn primary" type="button" data-quick="proyectos">${svg(ICO.mas)}<span>Nuevo proyecto</span></button>
+          <button class="btn hero-ghost" type="button" data-quick="pagos">${svg(ICO.dinero)}<span>Registrar pago</span></button>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">${artObra()}</div>
+    </section>`;
+}
+
+function artObra() {
+  return `
+    <svg viewBox="0 0 260 180" fill="none">
+      <g class="flotante">
+        <path d="M12 158h236" stroke="rgba(255,255,255,.22)" stroke-width="2" stroke-linecap="round"/>
+        <g stroke="rgba(255,255,255,.42)" stroke-width="2">
+          <rect x="96" y="94" width="74" height="64" rx="3"/>
+          <path d="M96 114h74M96 134h74M120 94v64M146 94v64"/>
+        </g>
+        <g stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round">
+          <path d="M58 158V44"/>
+          <path d="M42 58h152"/>
+          <path d="M58 44 42 58M58 44l16 14"/>
+          <path d="M170 58v28"/>
+          <path d="M58 58v20"/>
+        </g>
+        <rect x="158" y="86" width="24" height="17" rx="3" stroke="#fde68a" stroke-width="2"/>
+        <g stroke="rgba(253,230,138,.7)" stroke-width="2">
+          <rect x="186" y="140" width="34" height="18" rx="3"/>
+          <rect x="190" y="122" width="26" height="18" rx="3"/>
+        </g>
+      </g>
+    </svg>`;
+}
+
+function animarContadores() {
+  const reducido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll("[data-count]").forEach((el) => {
+    const fin = Number(el.dataset.count) || 0;
+    const money = el.dataset.formato === "money";
+    const pintarNum = (v) => { el.textContent = money ? dinero(v) : numero(v); };
+    if (reducido) { pintarNum(fin); return; }
+
+    const t0 = performance.now();
+    const dur = 850;
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      pintarNum(Math.round(fin * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+  });
+}
+
+function esqueleto() {
+  return `
+    <div class="sk sk-hero"></div>
+    <section class="kpis">${'<div class="sk sk-kpi"></div>'.repeat(4)}</section>
+    <div class="grid-2"><div class="sk sk-card"></div><div class="sk sk-card"></div></div>
+    <div class="sk sk-panel"></div>`;
 }
 
 function dona(conteo, total) {
@@ -699,8 +789,8 @@ function pintarFilas(nombre) {
     </th>`;
   }).join("") + (editable ? `<th class="acciones"><span class="sr-only">Acciones</span></th>` : "");
 
-  const body = filas.map((f) => `
-    <tr>${cols.map((c) => {
+  const body = filas.map((f, i) => `
+    <tr class="${animarEntrada ? "row-in" : ""}" ${animarEntrada ? `style="animation-delay:${Math.min(i, 10) * 28}ms"` : ""}>${cols.map((c) => {
       const classe = [c.tipo === "principal" || c.tipo === "persona" ? "strong" : "", c.num ? "r" : ""].join(" ");
       return `<td class="${classe}">${celda(f, c)}</td>`;
     }).join("")}
@@ -881,11 +971,21 @@ function programarRefresco(propio) {
   clearTimeout(timerRefresco);
   timerRefresco = setTimeout(async () => {
     await cargarTodo(true);
+    marcarActualizado();
     if (toastPendiente) {
       toast("Cambio recibido en tiempo real", "info");
       toastPendiente = false;
     }
   }, 350);
+}
+
+function marcarActualizado() {
+  const el = $("#updated");
+  if (!el) return;
+  el.classList.remove("flash");
+  void el.offsetWidth;
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 1200);
 }
 
 async function iniciarTiempoReal() {
@@ -914,7 +1014,9 @@ async function iniciarTiempoReal() {
 function ir(nombre) {
   pestaña = nombre;
   if (location.hash.slice(1) !== nombre) history.replaceState(null, "", "#" + nombre);
+  animarEntrada = true;
   pintar();
+  animarEntrada = false;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -925,6 +1027,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#nav").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-tab]");
     if (btn) ir(btn.dataset.tab);
+  });
+
+  document.addEventListener("click", (e) => {
+    const q = e.target.closest("[data-quick]");
+    if (q) abrirModal(q.dataset.quick, null);
   });
 
   $("#refrescar").addEventListener("click", () => cargarTodo(true));
