@@ -82,6 +82,16 @@
   .status.show { display: block; }
   .status.ok { background: #ecfdf5; color: var(--ok); border: 1px solid #a7f3d0; }
   .status.err { background: #fef2f2; color: var(--err); border: 1px solid #fecaca; }
+  .alt {
+    margin: 20px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid #eef2f7;
+    text-align: center;
+    font-size: .82rem;
+    color: var(--muted);
+  }
+  .alt a { color: var(--brand); font-weight: 600; text-decoration: none; }
+  .alt a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -109,6 +119,8 @@
       <button type="submit" id="btn-enviar">Enviar mensaje</button>
       <div id="estado" class="status" role="status" aria-live="polite"></div>
     </form>
+
+    <p class="alt">¿Buscas los datos de la empresa? <a href="https://panel-constructora.vercel.app/">Abrir panel de operaciones →</a></p>
   </main>
 
   <script src="config.js"></script>

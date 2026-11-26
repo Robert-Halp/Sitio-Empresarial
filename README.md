@@ -149,11 +149,18 @@ bloqueados. Se crean en `20261126195016_vistas_publicas.sql`.
 
 ## Panel de operaciones (dashboard)
 
-**Publicado:** https://robert-halp.github.io/Sitio-Empresarial/
+**Publicado (Vercel):** https://panel-constructora.vercel.app
+**Espejo (GitHub Pages):** https://robert-halp.github.io/Sitio-Empresarial/
 
 `docs/` contiene un dashboard estático (HTML + CSS + JS, sin build) que consume las 5 vistas
-con `Accept-Profile: constructora`. Incluye KPIs, búsqueda, orden por columna y gráfico de
-proyectos por estado.
+con `Accept-Profile: constructora`. Incluye KPIs, dona de estados, buscador, orden por columna
+y exportación a CSV. El formulario de contacto enlaza al panel y el panel enlaza al formulario.
+
+```powershell
+# desplegar el panel a producción en Vercel
+cd docs
+vercel deploy --prod --yes --project panel-constructora
+```
 
 ```
 docs/
