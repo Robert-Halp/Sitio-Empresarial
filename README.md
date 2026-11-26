@@ -92,7 +92,11 @@ Mensajes del formulario de contacto.
 
 El formulario público solo puede **insertar**. Nadie anónimo puede leer los mensajes.
 
-### Constructora de casas — 5 tablas
+### Schema `constructora` — 5 tablas
+
+> **Importante:** estas tablas viven en el schema **`constructora`**, no en `public`.
+> Al consultar por la API hay que enviar la cabecera `Accept-Profile: constructora`
+> (y `Content-Profile: constructora` al escribir).
 
 ```
 clientes 1 ──── N proyectos
@@ -124,6 +128,8 @@ materiales (catálogo independiente)
 - No se puede borrar un cliente con proyectos (`on delete restrict`)
 
 **Seguridad:** RLS activo en las 5 tablas. Solo `service_role` puede operar; `anon` recibe `401 42501`. Las políticas `staff ...` conceden acceso a usuarios autenticados cuando se añada Auth.
+
+**Schema expuesto:** `public`, `graphql_public` y `constructora` (`supabase/config.toml` → `[api] schemas`).
 
 ## Formulario web
 
