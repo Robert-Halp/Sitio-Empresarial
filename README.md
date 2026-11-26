@@ -92,30 +92,34 @@ Mensajes del formulario de contacto.
 
 El formulario público solo puede **insertar**. Nadie anónimo puede leer los mensajes.
 
-### Schema `constructora` — 5 tablas
+### Schema `constructora` — 10 tablas
 
 > **Importante:** estas tablas viven en el schema **`constructora`**, no en `public`.
 > Al consultar por la API hay que enviar la cabecera `Accept-Profile: constructora`
 > (y `Content-Profile: constructora` al escribir).
 
 ```
-clientes 1 ──── N proyectos
-                      │
-                      │ N
-                      ▼
-                 asignaciones  ◄──── N empleados
-                 (proyecto ↔ empleado)
-
-materiales (catálogo independiente)
+clientes 1 ─── N proyectos
+proyectos 1 ─── N asignaciones ─── N empleados
+proyectos 1 ─── N pagos
+proyectos 1 ─── N consumos ─── N materiales
+proyectos 1 ─── N avances
+empleados 1 ─── N nomina        (privada)
+proveedores                     (catálogo de compras)
 ```
 
 | Tabla | Para qué sirve | Columnas clave |
 |---|---|---|
 | `clientes` | Quién contrata la obra | nombre, email (único), teléfono, dirección |
 | `proyectos` | Cada obra | cliente_id → clientes, nombre, estado, presupuesto, fechas |
-| `empleados` | Plantilla | nombre, puesto, salario, activo, contratado_en |
+| `empleados` | Plantilla | nombre, puesto, activo, contratado_en |
 | `asignaciones` | Quién trabaja en qué obra | proyecto_id, empleado_id, rol_en_obra, horas_semanales, desde/hasta |
 | `materiales` | Catálogo con inventario | nombre, unidad, precio_unitario, stock, proveedor |
+| `proveedores` | Empresas que surten | nombre (único), contacto, teléfono, email, activo |
+| `pagos` | Cobros y abonos por obra | proyecto_id, monto, fecha, método, referencia, estado |
+| `consumos` | Material usado en cada obra | proyecto_id, material_id, cantidad, fecha, notas |
+| `avances` | Reportes de avance | proyecto_id, empleado_id, fecha, porcentaje, descripción |
+| `nomina` | Historial salarial (**privado**) | empleado_id, salario, desde, hasta |
 
 **Reglas de integridad incluidas:**
 
@@ -127,34 +131,48 @@ materiales (catálogo independiente)
 - Borrar un proyecto borra sus asignaciones (`on delete cascade`)
 - No se puede borrar un cliente con proyectos (`on delete restrict`)
 
-**Seguridad:** RLS activo en las 5 tablas. Solo `service_role` puede operar; `anon` recibe `401 42501`. Las políticas `staff ...` conceden acceso a usuarios autenticados cuando se añada Auth.
+**Seguridad:** RLS activo en las 10 tablas. `nomina` solo la lee `service_role`. En **modo demo**
+`anon` puede leer, insertar y actualizar las 9 tablas operativas (nunca borrar). Las políticas
+`staff ...` conceden acceso completo a usuarios autenticados cuando se añada Auth.
 
 **Schema expuesto:** `public`, `graphql_public` y `constructora` (`supabase/config.toml` → `[api] schemas`).
 
-### Vistas públicas de solo lectura
+### Vistas y escritura del panel
 
-El panel web no puede leer las tablas (RLS solo permite `service_role`). Por eso se exponen
-5 **vistas** que resuelven las relaciones y ocultan datos sensibles (`empleados.salario`):
+El panel **lee** de 9 vistas que resuelven las relaciones y **escribe** en las tablas.
+`nomina` no tiene vista ni permisos para `anon`: el salario queda privado.
 
 | Vista | Contenido |
 |---|---|
-| `constructora.vista_clientes` | Cliente con contacto y dirección |
+| `constructora.vista_clientes` | Cliente con contacto, dirección y notas |
 | `constructora.vista_proyectos` | Proyecto + nombre del cliente |
-| `constructora.vista_empleados` | Plantilla **sin salario** |
+| `constructora.vista_empleados` | Plantilla (sin salario) |
 | `constructora.vista_asignaciones` | Empleado + proyecto + rol resueltos |
 | `constructora.vista_materiales` | Catálogo con precio y stock |
+| `constructora.vista_proveedores` | Proveedores con contacto |
+| `constructora.vista_pagos` | Pago + nombre del proyecto |
+| `constructora.vista_consumos` | Material + cantidad + costo calculado |
+| `constructora.vista_avances` | Avance + proyecto + responsable |
 
-`anon` solo tiene `SELECT` sobre estas vistas; INSERT/UPDATE/DELETE y las tablas base siguen
-bloqueados. Se crean en `20261126195016_vistas_publicas.sql`.
+**Modo demo:** `anon` tiene `SELECT`, `INSERT` y `UPDATE` sobre las 9 tablas operativas
+(sin `DELETE`). Cualquiera con la URL puede crear o editar registros; antes de publicar de
+verdad hay que sustituirlo por Supabase Auth. Se aplica en
+`20261126210759_ampliar_constructora.sql`.
 
 ## Panel de operaciones (dashboard)
 
 **Publicado (Vercel):** https://panel-constructora.vercel.app
 **Espejo (GitHub Pages):** https://robert-halp.github.io/Sitio-Empresarial/
 
-`docs/` contiene un dashboard estático (HTML + CSS + JS, sin build) que consume las 5 vistas
-con `Accept-Profile: constructora`. Incluye KPIs, dona de estados, buscador, orden por columna
-y exportación a CSV. El formulario de contacto enlaza al panel y el panel enlaza al formulario.
+`docs/` contiene un dashboard estático (HTML + CSS + JS, sin build) que consume las 9 vistas
+con `Accept-Profile: constructora`. Incluye KPIs, dona de estados, buscador, orden por columna,
+exportación a CSV y **formularios de alta y edición** que escriben en la base de datos.
+
+**Tiempo real:** las 9 tablas están publicadas en `supabase_realtime`; el panel se suscribe con
+`@supabase/supabase-js` (CDN) y se refresca solo cuando cambia un registro, venga del propio
+panel o del *Table Editor*. Si el CDN no carga, cae a sondeo cada 15 s.
+
+El formulario de contacto enlaza al panel y el panel enlaza al formulario.
 
 ```powershell
 # desplegar el panel a producción en Vercel
@@ -219,3 +237,8 @@ npx serve .          # o abre index.html directamente en el navegador
 - `SUPABASE_SERVICE_ROLE_KEY` omite RLS → **solo en servidor**.
 - Activa **RLS en todas las tablas** y escribe políticas explícitas.
 - No expongas tablas nuevas automáticamente; da permisos a mano.
+- **Modo demo:** el panel permite a `anon` insertar y actualizar en las 9 tablas operativas
+  para poder demostrar el CRUD. Eso significa que cualquiera con la URL puede modificar datos.
+  No hay `DELETE` para `anon`. Para un entorno real: activar Supabase Auth, cambiar las políticas
+  a `to authenticated` y retirar los permisos de escritura a `anon`.
+- `nomina` (salarios) está fuera del panel: solo `service_role` tiene acceso.

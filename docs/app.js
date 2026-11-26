@@ -1,6 +1,7 @@
 /* =========================================================
    Constructora · Panel de operaciones
-   Solo lectura: claves públicas + vistas de Supabase.
+   Lee de vistas y escribe en tablas (schema constructora).
+   Actualización en vivo con Supabase Realtime.
    ========================================================= */
 
 const CFG = {
@@ -17,21 +18,30 @@ const ICO = {
   empleados: `<rect x="3" y="4" width="18" height="17" rx="2.2"/><circle cx="9" cy="10" r="2.3"/><path d="M6 17.2c0-2 1.5-3.2 3-3.2s3 1.2 3 3.2"/><path d="M15 9.5h3M15 13.5h3"/>`,
   asignaciones: `<path d="M10.5 13.5a4.5 4.5 0 0 0 6.4 0l2.6-2.6a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M13.5 10.5a4.5 4.5 0 0 0-6.4 0l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>`,
   materiales: `<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>`,
+  proveedores: `<path d="M1 3h13v13H1z"/><path d="M14 8h4l4 4v4h-8"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/>`,
+  pagos: `<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20"/><path d="M6 15h4"/>`,
+  consumos: `<path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/>`,
+  avances: `<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>`,
   dinero: `<rect x="2.5" y="6" width="19" height="12.5" rx="2.5"/><path d="M2.5 10.5h19"/><circle cx="17" cy="14.8" r="1.1"/>`,
   alerta: `<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/>`,
   buscar: `<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/>`,
   bajar: `<path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/>`,
-  refrescar: `<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/>`
+  mas: `<path d="M12 5v14"/><path d="M5 12h14"/>`,
+  editar: `<path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="m14.5 5.5 4 4"/>`
 };
 const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 
-/* ---------------- configuración de vistas ---------------- */
+/* ---------------- secciones ---------------- */
 const TABLAS = {
   clientes:     { vista: "vista_clientes",     icono: "clientes",     titulo: "Clientes",     sub: "Personas y empresas que contratan una obra.", seccion: "Catálogos" },
   proyectos:    { vista: "vista_proyectos",    icono: "proyectos",    titulo: "Proyectos",    sub: "Obras en curso, presupuesto y fechas de entrega.", seccion: "Operación" },
-  empleados:    { vista: "vista_empleados",    icono: "empleados",    titulo: "Empleados",    sub: "Plantilla de la constructora. El salario no se expone.", seccion: "Catálogos" },
+  empleados:    { vista: "vista_empleados",    icono: "empleados",    titulo: "Empleados",    sub: "Plantilla de la constructora.", seccion: "Catálogos" },
   asignaciones: { vista: "vista_asignaciones", icono: "asignaciones", titulo: "Asignaciones", sub: "Quién trabaja en cada obra y con qué rol.", seccion: "Operación" },
-  materiales:   { vista: "vista_materiales",   icono: "materiales",   titulo: "Materiales",   sub: "Catálogo con precios y existencias.", seccion: "Catálogos" }
+  materiales:   { vista: "vista_materiales",   icono: "materiales",   titulo: "Materiales",   sub: "Catálogo con precios y existencias.", seccion: "Catálogos" },
+  proveedores:  { vista: "vista_proveedores",  icono: "proveedores",  titulo: "Proveedores",  sub: "Empresas que surten materiales.", seccion: "Compras" },
+  pagos:        { vista: "vista_pagos",        icono: "pagos",        titulo: "Pagos",        sub: "Cobros y abonos recibidos por proyecto.", seccion: "Finanzas" },
+  consumos:     { vista: "vista_consumos",     icono: "consumos",     titulo: "Consumos",     sub: "Materiales usados en cada obra y su costo.", seccion: "Operación" },
+  avances:      { vista: "vista_avances",      icono: "avances",      titulo: "Avances",      sub: "Reportes de avance con porcentaje de obra.", seccion: "Operación" }
 };
 
 const RESUMEN = {
@@ -40,6 +50,7 @@ const RESUMEN = {
   seccion: "General"
 };
 
+/* ---------------- columnas de cada tabla ---------------- */
 const COLS = {
   clientes: [
     { k: "nombre",    t: "Cliente",  tipo: "persona" },
@@ -50,7 +61,7 @@ const COLS = {
   ],
   proyectos: [
     { k: "nombre",        t: "Proyecto",    tipo: "principal" },
-    { k: "cliente",       t: "Cliente",     sub: true },
+    { k: "cliente",       t: "Cliente" },
     { k: "estado",        t: "Estado",      tipo: "estado" },
     { k: "presupuesto",   t: "Presupuesto", tipo: "dinero", dec: 0, num: true },
     { k: "fecha_inicio",  t: "Inicio",      tipo: "fecha" },
@@ -77,6 +88,35 @@ const COLS = {
     { k: "precio_unitario", t: "Precio unit.", tipo: "dinero", dec: 2, num: true },
     { k: "stock",           t: "Stock",       tipo: "stock", num: true },
     { k: "proveedor",       t: "Proveedor" }
+  ],
+  proveedores: [
+    { k: "nombre",   t: "Proveedor", tipo: "principal" },
+    { k: "contacto", t: "Contacto" },
+    { k: "telefono", t: "Teléfono" },
+    { k: "email",    t: "Email" },
+    { k: "activo",   t: "Activo",    tipo: "bool" }
+  ],
+  pagos: [
+    { k: "fecha",      t: "Fecha",     tipo: "fecha" },
+    { k: "proyecto",   t: "Proyecto" },
+    { k: "monto",      t: "Monto",     tipo: "dinero", dec: 2, num: true },
+    { k: "metodo",     t: "Método",    tipo: "puesto" },
+    { k: "referencia", t: "Referencia" },
+    { k: "estado",     t: "Estado",    tipo: "estado" }
+  ],
+  consumos: [
+    { k: "fecha",    t: "Fecha",    tipo: "fecha" },
+    { k: "proyecto", t: "Proyecto" },
+    { k: "material", t: "Material" },
+    { k: "cantidad", t: "Cantidad", num: true },
+    { k: "costo",    t: "Costo",    tipo: "dinero", dec: 2, num: true }
+  ],
+  avances: [
+    { k: "fecha",       t: "Fecha",       tipo: "fecha" },
+    { k: "proyecto",    t: "Proyecto" },
+    { k: "porcentaje",  t: "Avance",      tipo: "porcentaje" },
+    { k: "empleado",    t: "Responsable" },
+    { k: "descripcion", t: "Descripción" }
   ]
 };
 
@@ -85,24 +125,142 @@ const ORDEN_INICIAL = {
   proyectos:    { k: "presupuesto", dir: -1 },
   empleados:    { k: "nombre",      dir: 1 },
   asignaciones: { k: "empleado",    dir: 1 },
-  materiales:   { k: "stock",       dir: -1 }
+  materiales:   { k: "stock",       dir: -1 },
+  proveedores:  { k: "nombre",      dir: 1 },
+  pagos:        { k: "fecha",       dir: -1 },
+  consumos:     { k: "fecha",       dir: -1 },
+  avances:      { k: "fecha",       dir: -1 }
 };
 
+/* ---------------- catálogos de valores ---------------- */
 const ESTADOS = ["planificacion", "permisos", "cimentacion", "estructura", "acabados", "entregado", "cancelado"];
+const PUESTOS = ["arquitecto", "ingeniero", "maestro_obra", "albanil", "electricista", "plomero", "pintor", "administrativo"];
+const UNIDADES = ["unidad", "kg", "m", "m2", "m3", "saco", "litro", "rollo"];
+const METODOS = ["transferencia", "efectivo", "cheque", "tarjeta"];
+const ESTADOS_PAGO = ["pendiente", "pagado", "cancelado"];
+
 const COLOR_ESTADO = {
   planificacion: "#6366f1", permisos: "#8b5cf6", cimentacion: "#f59e0b",
   estructura: "#f97316", acabados: "#14b8a6", entregado: "#22c55e", cancelado: "#ef4444"
 };
 
+/* ---------------- formularios (alta y edición) ---------------- */
+const hoy = () => new Date().toISOString().slice(0, 10);
+
+const FORMULARIOS = {
+  clientes: {
+    tabla: "clientes", singular: "cliente",
+    campos: [
+      { k: "nombre",    t: "Nombre",    req: true, max: 120 },
+      { k: "email",     t: "Email",     tipo: "email" },
+      { k: "telefono",  t: "Teléfono",  tipo: "tel" },
+      { k: "direccion", t: "Dirección" },
+      { k: "notas",     t: "Notas",     tipo: "textarea" }
+    ]
+  },
+  proyectos: {
+    tabla: "proyectos", singular: "proyecto",
+    campos: [
+      { k: "cliente_id",    t: "Cliente",  tipo: "select", req: true, fuente: "clientes" },
+      { k: "nombre",        t: "Nombre del proyecto", req: true, max: 160 },
+      { k: "direccion",     t: "Dirección de la obra" },
+      { k: "estado",        t: "Estado",   tipo: "select", req: true, opciones: ESTADOS, defecto: "planificacion" },
+      { k: "presupuesto",   t: "Presupuesto (MXN)", tipo: "number", step: "0.01", min: 0 },
+      { k: "fecha_inicio",  t: "Fecha de inicio",  tipo: "date" },
+      { k: "fecha_entrega", t: "Fecha de entrega", tipo: "date" }
+    ]
+  },
+  empleados: {
+    tabla: "empleados", singular: "empleado",
+    campos: [
+      { k: "nombre",        t: "Nombre",  req: true, max: 120 },
+      { k: "email",         t: "Email",   tipo: "email" },
+      { k: "telefono",      t: "Teléfono", tipo: "tel" },
+      { k: "puesto",        t: "Puesto",  tipo: "select", req: true, opciones: PUESTOS },
+      { k: "contratado_en", t: "Fecha de contratación", tipo: "date", req: true, defecto: hoy },
+      { k: "activo",        t: "Activo",  tipo: "checkbox", defecto: true }
+    ]
+  },
+  asignaciones: {
+    tabla: "asignaciones", singular: "asignación",
+    campos: [
+      { k: "proyecto_id",     t: "Proyecto", tipo: "select", req: true, fuente: "proyectos" },
+      { k: "empleado_id",     t: "Empleado", tipo: "select", req: true, fuente: "empleados" },
+      { k: "rol_en_obra",     t: "Rol en obra" },
+      { k: "horas_semanales", t: "Horas por semana", tipo: "number", min: 1, maxv: 60 },
+      { k: "desde",           t: "Desde", tipo: "date", req: true, defecto: hoy },
+      { k: "hasta",           t: "Hasta", tipo: "date" }
+    ]
+  },
+  materiales: {
+    tabla: "materiales", singular: "material",
+    campos: [
+      { k: "nombre",          t: "Nombre", tipo: "principal", req: true, max: 120 },
+      { k: "unidad",          t: "Unidad", tipo: "select", req: true, opciones: UNIDADES },
+      { k: "precio_unitario", t: "Precio unitario (MXN)", tipo: "number", step: "0.01", min: 0, req: true },
+      { k: "stock",           t: "Stock",  tipo: "number", step: "0.01", min: 0, defecto: 0 },
+      { k: "proveedor",       t: "Proveedor" }
+    ]
+  },
+  proveedores: {
+    tabla: "proveedores", singular: "proveedor",
+    campos: [
+      { k: "nombre",   t: "Nombre", req: true, max: 120 },
+      { k: "contacto", t: "Persona de contacto" },
+      { k: "telefono", t: "Teléfono", tipo: "tel" },
+      { k: "email",    t: "Email", tipo: "email" },
+      { k: "activo",   t: "Activo", tipo: "checkbox", defecto: true }
+    ]
+  },
+  pagos: {
+    tabla: "pagos", singular: "pago",
+    campos: [
+      { k: "proyecto_id", t: "Proyecto", tipo: "select", req: true, fuente: "proyectos" },
+      { k: "monto",       t: "Monto (MXN)", tipo: "number", step: "0.01", min: 0.01, req: true },
+      { k: "fecha",       t: "Fecha", tipo: "date", req: true, defecto: hoy },
+      { k: "metodo",      t: "Método", tipo: "select", req: true, opciones: METODOS, defecto: "transferencia" },
+      { k: "referencia",  t: "Referencia" },
+      { k: "estado",      t: "Estado", tipo: "select", req: true, opciones: ESTADOS_PAGO, defecto: "pagado" }
+    ]
+  },
+  consumos: {
+    tabla: "consumos", singular: "consumo",
+    campos: [
+      { k: "proyecto_id", t: "Proyecto", tipo: "select", req: true, fuente: "proyectos" },
+      { k: "material_id", t: "Material", tipo: "select", req: true, fuente: "materiales" },
+      { k: "cantidad",    t: "Cantidad", tipo: "number", step: "0.001", min: 0.001, req: true },
+      { k: "fecha",       t: "Fecha", tipo: "date", req: true, defecto: hoy },
+      { k: "notas",       t: "Notas", tipo: "textarea" }
+    ]
+  },
+  avances: {
+    tabla: "avances", singular: "avance",
+    campos: [
+      { k: "proyecto_id", t: "Proyecto", tipo: "select", req: true, fuente: "proyectos" },
+      { k: "empleado_id", t: "Responsable", tipo: "select", fuente: "empleados" },
+      { k: "fecha",       t: "Fecha", tipo: "date", req: true, defecto: hoy },
+      { k: "porcentaje",  t: "Avance (%)", tipo: "number", min: 0, maxv: 100, req: true, defecto: 0 },
+      { k: "descripcion", t: "Descripción", tipo: "textarea" }
+    ]
+  }
+};
+
 /* ---------------- estado ---------------- */
 const datos = {};
-const filtros = { clientes: "", proyectos: "", empleados: "", asignaciones: "", materiales: "" };
+const filtros = {};
+Object.keys(TABLAS).forEach((k) => (filtros[k] = ""));
 const orden = JSON.parse(JSON.stringify(ORDEN_INICIAL));
+
 let pestaña = "resumen";
 let cargando = true;
 let refrescando = false;
 let error = null;
 let actualizado = null;
+let realtimeActivo = false;
+let formActual = null;          // { nombre, fila }
+let ultimaAccionPropia = 0;
+let timerRefresco = null;
+let toastPendiente = false;
 
 /* ---------------- utilidades ---------------- */
 const $ = (s) => document.querySelector(s);
@@ -136,21 +294,25 @@ function iniciales(nombre) {
 }
 function diasHasta(f) {
   if (!f) return null;
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const h = new Date(); h.setHours(0, 0, 0, 0);
   const d = new Date(String(f).slice(0, 10) + "T00:00:00");
-  return Math.round((d - hoy) / 86400000);
+  return Math.round((d - h) / 86400000);
 }
 const variante = (s) => "a" + ((String(s).length % 4) + 1);
 
 /* ---------------- API ---------------- */
+function cabeceras(extra = {}) {
+  return {
+    apikey: CFG.key,
+    Authorization: `Bearer ${CFG.key}`,
+    "Accept-Profile": CFG.schema,
+    "Content-Profile": CFG.schema,
+    ...extra
+  };
+}
+
 async function pedirVista(vista) {
-  const res = await fetch(`${CFG.url}/rest/v1/${vista}?select=*`, {
-    headers: {
-      apikey: CFG.key,
-      Authorization: `Bearer ${CFG.key}`,
-      "Accept-Profile": CFG.schema
-    }
-  });
+  const res = await fetch(`${CFG.url}/rest/v1/${vista}?select=*`, { headers: cabeceras() });
   if (!res.ok) {
     const detalle = (await res.text()).slice(0, 180);
     throw new Error(`${vista}: HTTP ${res.status} · ${detalle}`);
@@ -158,10 +320,43 @@ async function pedirVista(vista) {
   return res.json();
 }
 
+async function mensajeError(res) {
+  try {
+    const j = await res.json();
+    return [j.message, j.details, j.hint].filter(Boolean).join(" · ") || `HTTP ${res.status}`;
+  } catch (_) {
+    return `HTTP ${res.status}`;
+  }
+}
+
+async function insertar(tabla, payload) {
+  const res = await fetch(`${CFG.url}/rest/v1/${tabla}`, {
+    method: "POST",
+    headers: cabeceras({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await mensajeError(res));
+}
+
+async function actualizar(tabla, id, payload) {
+  const res = await fetch(`${CFG.url}/rest/v1/${tabla}?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: cabeceras({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await mensajeError(res));
+}
+
+/* ---------------- carga ---------------- */
 async function cargarTodo(esRefresco = false) {
-  if (esRefresco) refrescando = true;
-  else { cargando = true; error = null; }
-  pintar();
+  if (esRefresco) {
+    refrescando = true;
+    bloquearBoton(true);
+  } else {
+    cargando = true;
+    error = null;
+    pintar();
+  }
 
   try {
     const nombres = Object.keys(TABLAS);
@@ -172,13 +367,25 @@ async function cargarTodo(esRefresco = false) {
   } catch (e) {
     error = e.message || String(e);
   }
+
   cargando = false;
   refrescando = false;
   pintar();
 }
 
-/* ---------------- pintado general ---------------- */
+function bloquearBoton(activo) {
+  const btn = $("#refrescar");
+  if (!btn) return;
+  btn.disabled = activo;
+  btn.querySelector("svg").classList.toggle("spin", activo);
+}
+
+/* ---------------- pintado ---------------- */
 function pintar() {
+  const activo = document.activeElement;
+  const eraBusqueda = activo && activo.id === "q";
+  const cursor = eraBusqueda ? activo.selectionStart : 0;
+
   pintarNav();
   pintarCabecera();
   pintarLive();
@@ -193,9 +400,12 @@ function pintar() {
   if (pestaña === "resumen") pintarResumen();
   else pintarTabla(pestaña);
 
-  const btn = $("#refrescar");
-  btn.disabled = refrescando;
-  btn.querySelector("svg").classList.toggle("spin", refrescando);
+  bloquearBoton(refrescando);
+
+  if (eraBusqueda) {
+    const q = $("#q");
+    if (q) { q.focus(); try { q.setSelectionRange(cursor, cursor); } catch (_) {} }
+  }
 }
 
 function pintarNav() {
@@ -225,7 +435,14 @@ function pintarLive() {
   const txt = $("#live-txt");
   if (!dot) return;
   dot.className = "dot " + (error ? "err" : cargando ? "load" : "");
-  txt.textContent = error ? "Sin conexión" : cargando ? "Conectando…" : "En vivo · Supabase";
+  txt.textContent = error
+    ? "Sin conexión"
+    : cargando
+      ? "Conectando…"
+      : realtimeActivo ? "En vivo · tiempo real" : "En vivo · Supabase";
+  $("#live").title = realtimeActivo
+    ? "Los cambios se sincronizan automáticamente"
+    : "Actualización manual disponible";
 }
 
 function pintarAviso() {
@@ -252,6 +469,10 @@ function pintarResumen() {
 
   const topProy = [...p].sort((a, b) => Number(b.presupuesto) - Number(a.presupuesto)).slice(0, 4);
   const maxPro = Math.max(1, ...topProy.map((x) => Number(x.presupuesto) || 0));
+
+  const pagos = datos.pagos || [];
+  const cobrado = pagos.filter((x) => x.estado === "pagado").reduce((s, x) => s + Number(x.monto || 0), 0);
+  const pendiente = pagos.filter((x) => x.estado === "pendiente").reduce((s, x) => s + Number(x.monto || 0), 0);
 
   $("#vista").innerHTML = `
     <section class="kpis">
@@ -297,8 +518,16 @@ function pintarResumen() {
       </div>
 
       <div class="card">
-        <div class="card-head"><h3>Inventario bajo</h3><span class="meta">${bajo.length} material${bajo.length === 1 ? "" : "es"}</span></div>
-        ${bajo.sort((a, b) => Number(a.stock) - Number(b.stock)).map((m) => `
+        <div class="card-head"><h3>Cobrado vs pendiente</h3><span class="meta">${pagos.length} pagos</span></div>
+        <div class="money-row">
+          <div><span class="money-lbl">Cobrado</span><strong class="money ok">${dinero(cobrado)}</strong></div>
+          <div><span class="money-lbl">Pendiente</span><strong class="money warn">${dinero(pendiente)}</strong></div>
+        </div>
+        <div class="track" style="height:10px;margin-top:6px">
+          <div class="fill" style="width:${cobrado + pendiente ? (cobrado / (cobrado + pendiente)) * 100 : 0}%;background:linear-gradient(90deg,#34d399,#059669)"></div>
+        </div>
+        <div class="card-head" style="margin:18px 0 10px"><h3 style="font-size:12.5px">Inventario bajo</h3><span class="meta">${bajo.length}</span></div>
+        ${bajo.sort((a, b) => Number(a.stock) - Number(b.stock)).slice(0, 3).map((m) => `
           <div class="stock-row">
             <div class="nm">${esc(m.nombre)}<small>${esc(m.proveedor || "sin proveedor")}</small></div>
             <div class="track"><div class="fill" style="width:${Math.min(100, (Number(m.stock) / 120) * 100)}%;background:linear-gradient(90deg,#fca5a5,#ef4444)"></div></div>
@@ -328,9 +557,9 @@ function dona(conteo, total) {
     ESTADOS.filter((e) => conteo[e] > 0).map((e) => {
       const largo = (conteo[e] / total) * C;
       const hueco = 2.5;
+      const visible = Math.max(largo - hueco, 1);
       const s = `<circle class="seg" cx="84" cy="84" r="${R}" fill="none" stroke="${COLOR_ESTADO[e]}" stroke-width="17"
-        stroke-dasharray="${Math.max(largo - hueco, 1)} ${C - Math.max(largo - hueco, 1)}"
-        stroke-dashoffset="${-offset}"/>`;
+        stroke-dasharray="${visible} ${C - visible}" stroke-dashoffset="${-offset}"/>`;
       offset += largo;
       return s;
     }).join("");
@@ -367,7 +596,8 @@ function pintarTabla(nombre) {
         </div>
         <div class="panel-tools">
           <span class="meta muted" id="meta-count"></span>
-          <button class="btn ghost" id="csv" type="button">${svg(ICO.bajar)}<span>Exportar CSV</span></button>
+          <button class="btn ghost" id="csv" type="button">${svg(ICO.bajar)}<span>Exportar</span></button>
+          <button class="btn primary" id="nuevo" type="button">${svg(ICO.mas)}<span>Nuevo</span></button>
         </div>
       </div>
       <div id="lista"></div>
@@ -379,11 +609,18 @@ function pintarTabla(nombre) {
   });
 
   $("#csv").addEventListener("click", () => descargarCSV(nombre));
+  $("#nuevo").addEventListener("click", () => abrirModal(nombre, null));
 
   $("#lista").addEventListener("click", (e) => {
-    const btn = e.target.closest("th button[data-k]");
-    if (!btn) return;
-    const k = btn.dataset.k;
+    const editar = e.target.closest("button[data-edit]");
+    if (editar) {
+      const fila = (datos[nombre] || []).find((r) => String(r.id) === editar.dataset.edit);
+      if (fila) abrirModal(nombre, fila);
+      return;
+    }
+    const th = e.target.closest("th button[data-k]");
+    if (!th) return;
+    const k = th.dataset.k;
     if (orden[nombre].k === k) orden[nombre].dir *= -1;
     else { orden[nombre].k = k; orden[nombre].dir = 1; }
     pintarFilas(nombre);
@@ -408,8 +645,8 @@ function filasVisibles(nombre) {
   const { k, dir } = orden[nombre];
   const col = cols.find((c) => c.k === k) || cols[0];
   filas.sort((a, b) => {
-    let va = a[col.k], vb = b[col.k];
-    if (col.tipo === "dinero" || col.num || col.tipo === "stock") {
+    const va = a[col.k], vb = b[col.k];
+    if (col.tipo === "dinero" || col.num || col.tipo === "stock" || col.tipo === "porcentaje") {
       return ((Number(va) || 0) - (Number(vb) || 0)) * dir;
     }
     return String(va ?? "").toLowerCase().localeCompare(String(vb ?? "").toLowerCase(), "es") * dir;
@@ -441,6 +678,8 @@ function celda(fila, col) {
       return v ? `<span class="yes">Sí</span>` : `<span class="no">No</span>`;
     case "stock":
       return `<span class="${Number(v) < 120 ? "low" : ""}">${numero(v)}</span>`;
+    case "porcentaje":
+      return `<span class="pct"><span class="pct-track"><i style="width:${Number(v)}%"></i></span><b>${Number(v)}%</b></span>`;
     default:
       return esc(v);
   }
@@ -451,19 +690,22 @@ function pintarFilas(nombre) {
   const filas = filasVisibles(nombre);
   const total = (datos[nombre] || []).length;
   const o = orden[nombre];
+  const editable = Boolean(FORMULARIOS[nombre]);
 
   const head = cols.map((c) => {
     const activa = o.k === c.k;
     return `<th class="${activa ? "sorted" : ""} ${c.num ? "r" : ""}">
       <button data-k="${c.k}">${esc(c.t)}<span class="arw">${activa ? (o.dir === 1 ? "▲" : "▼") : "↕"}</span></button>
     </th>`;
-  }).join("");
+  }).join("") + (editable ? `<th class="acciones"><span class="sr-only">Acciones</span></th>` : "");
 
   const body = filas.map((f) => `
     <tr>${cols.map((c) => {
       const classe = [c.tipo === "principal" || c.tipo === "persona" ? "strong" : "", c.num ? "r" : ""].join(" ");
       return `<td class="${classe}">${celda(f, c)}</td>`;
-    }).join("")}</tr>`).join("");
+    }).join("")}
+    ${editable ? `<td class="acciones"><button class="icon-btn" data-edit="${esc(f.id)}" title="Editar" aria-label="Editar">${svg(ICO.editar)}</button></td>` : ""}
+    </tr>`).join("");
 
   $("#meta-count").textContent = `${total} registro${total === 1 ? "" : "s"}`;
   $("#csv").disabled = filas.length === 0;
@@ -472,13 +714,140 @@ function pintarFilas(nombre) {
     <div class="table-scroll">
       <table>
         <thead><tr>${head}</tr></thead>
-        <tbody>${body || `<tr><td colspan="${cols.length}"><div class="empty">Sin resultados para “${esc(filtros[nombre])}”.</div></td></tr>`}</tbody>
+        <tbody>${body || `<tr><td colspan="${cols.length + (editable ? 1 : 0)}"><div class="empty">Sin resultados para “${esc(filtros[nombre])}”.</div></td></tr>`}</tbody>
       </table>
     </div>
     <div class="panel-foot">
       <span>Mostrando <strong>${filas.length}</strong> de ${total}</span>
-      <span>Datos de solo lectura</span>
+      <span>Los cambios se guardan en la base de datos</span>
     </div>`;
+}
+
+/* ---------------- modal de alta / edición ---------------- */
+function opcionesDe(campo) {
+  if (campo.fuente) {
+    const arr = datos[campo.fuente] || [];
+    return arr.map((x) => ({
+      v: x.id,
+      t: campo.fuente === "materiales" ? `${x.nombre} (${x.unidad})` : x.nombre
+    }));
+  }
+  return (campo.opciones || []).map((o) => (typeof o === "string" ? { v: o, t: humano(o) } : o));
+}
+
+function campoHTML(c, valor) {
+  const id = "f_" + c.k;
+  const val = valor !== undefined ? valor : (typeof c.defecto === "function" ? c.defecto() : c.defecto ?? "");
+  const req = c.req ? "required" : "";
+  const label = `<span>${esc(c.t)}${c.req ? ' <em>*</em>' : ""}</span>`;
+
+  if (c.tipo === "checkbox") {
+    return `<label class="field check">
+      <input type="checkbox" id="${id}" ${val ? "checked" : ""}>
+      <span>${esc(c.t)}</span>
+    </label>`;
+  }
+
+  if (c.tipo === "textarea") {
+    return `<label class="field wide">${label}
+      <textarea id="${id}" rows="3" ${req} maxlength="${c.max || 2000}">${esc(val)}</textarea>
+    </label>`;
+  }
+
+  if (c.tipo === "select") {
+    const opts = opcionesDe(c).map((o) =>
+      `<option value="${esc(o.v)}" ${String(o.v) === String(val) ? "selected" : ""}>${esc(o.t)}</option>`).join("");
+    return `<label class="field">${label}
+      <select id="${id}" ${req}>
+        <option value="">Selecciona…</option>
+        ${opts}
+      </select>
+    </label>`;
+  }
+
+  const extra = c.tipo === "number"
+    ? `step="${c.step || "any"}" ${c.min !== undefined ? `min="${c.min}"` : ""} ${c.maxv !== undefined ? `max="${c.maxv}"` : ""}`
+    : "";
+
+  return `<label class="field">${label}
+    <input id="${id}" type="${c.tipo || "text"}" value="${esc(val)}" ${req} ${extra} ${c.max ? `maxlength="${c.max}"` : ""}>
+  </label>`;
+}
+
+function abrirModal(nombre, fila) {
+  const cfg = FORMULARIOS[nombre];
+  if (!cfg) return;
+  formActual = { nombre, fila };
+
+  $("#modal-title").textContent = (fila ? "Editar " : "Nuevo ") + cfg.singular;
+  $("#modal-error").hidden = true;
+  $("#modal-fields").innerHTML = cfg.campos
+    .map((c) => campoHTML(c, fila ? (fila[c.k] ?? "") : undefined))
+    .join("");
+
+  $("#modal").hidden = false;
+  document.body.classList.add("modal-open");
+  const primero = $("#modal-fields input, #modal-fields select, #modal-fields textarea");
+  if (primero) primero.focus();
+}
+
+function cerrarModal() {
+  $("#modal").hidden = true;
+  document.body.classList.remove("modal-open");
+  formActual = null;
+}
+
+function leerFormulario() {
+  const cfg = FORMULARIOS[formActual.nombre];
+  const payload = {};
+  for (const c of cfg.campos) {
+    const el = document.getElementById("f_" + c.k);
+    if (!el) continue;
+    if (c.tipo === "checkbox") payload[c.k] = el.checked;
+    else if (c.tipo === "number") payload[c.k] = el.value === "" ? null : Number(el.value);
+    else payload[c.k] = el.value.trim() === "" ? null : el.value.trim();
+  }
+  return payload;
+}
+
+async function guardarFormulario(e) {
+  e.preventDefault();
+  const form = e.target;
+  if (!form.reportValidity()) return;
+
+  const cfg = FORMULARIOS[formActual.nombre];
+  const fila = formActual.fila;
+  const payload = leerFormulario();
+  const btn = $("#modal-save");
+
+  btn.disabled = true;
+  $("#modal-error").hidden = true;
+
+  try {
+    ultimaAccionPropia = Date.now();
+    if (fila) await actualizar(cfg.tabla, fila.id, payload);
+    else await insertar(cfg.tabla, payload);
+
+    cerrarModal();
+    toast(fila ? `${humano(cfg.singular)} actualizado` : `${humano(cfg.singular)} creado`, "ok");
+    await cargarTodo(true);
+  } catch (err) {
+    $("#modal-error").hidden = false;
+    $("#modal-error").textContent = "No se pudo guardar: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ---------------- toasts ---------------- */
+function toast(texto, tipo = "ok") {
+  const cont = $("#toasts");
+  const el = document.createElement("div");
+  el.className = "toast " + tipo;
+  el.textContent = texto;
+  cont.appendChild(el);
+  setTimeout(() => { el.classList.add("out"); }, 2600);
+  setTimeout(() => { el.remove(); }, 3200);
 }
 
 /* ---------------- exportar CSV ---------------- */
@@ -506,6 +875,41 @@ function descargarCSV(nombre) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+/* ---------------- tiempo real ---------------- */
+function programarRefresco(propio) {
+  if (!propio) toastPendiente = true;
+  clearTimeout(timerRefresco);
+  timerRefresco = setTimeout(async () => {
+    await cargarTodo(true);
+    if (toastPendiente) {
+      toast("Cambio recibido en tiempo real", "info");
+      toastPendiente = false;
+    }
+  }, 350);
+}
+
+async function iniciarTiempoReal() {
+  try {
+    const mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+    const sb = mod.createClient(CFG.url, CFG.key, { db: { schema: CFG.schema } });
+
+    sb.channel("panel-constructora")
+      .on("postgres_changes", { event: "*", schema: CFG.schema }, () => {
+        const propio = Date.now() - ultimaAccionPropia < 2000;
+        programarRefresco(propio);
+      })
+      .subscribe((estado) => {
+        realtimeActivo = estado === "SUBSCRIBED";
+        pintarLive();
+      });
+  } catch (e) {
+    // Sin CDN: se mantiene el panel funcional con refresco periódico.
+    realtimeActivo = false;
+    pintarLive();
+    setInterval(() => { if (!document.hidden) cargarTodo(true); }, 15000);
+  }
+}
+
 /* ---------------- navegación ---------------- */
 function ir(nombre) {
   pestaña = nombre;
@@ -525,10 +929,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("#refrescar").addEventListener("click", () => cargarTodo(true));
 
+  $("#modal-close").addEventListener("click", cerrarModal);
+  $("#modal-cancel").addEventListener("click", cerrarModal);
+  $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") cerrarModal(); });
+  $("#modal-form").addEventListener("submit", guardarFormulario);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("#modal").hidden) cerrarModal();
+  });
+
   window.addEventListener("hashchange", () => {
     const h = location.hash.slice(1);
     if ((h === "resumen" || TABLAS[h]) && h !== pestaña) { pestaña = h; pintar(); }
   });
 
-  cargarTodo();
+  cargarTodo().then(iniciarTiempoReal);
 });
